@@ -1,0 +1,1555 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#003b5c">
+  <title>Trailblazer — Made by Students for Student</title>
+  <style>
+    /* Theme tokens are shared across the app; update these to change the visual palette. */
+    :root {
+      color-scheme: light;
+      --navy: #003b5c;
+      --navy-dark: #002b45;
+      --orange: #f15a24;
+      --orange-soft: #fff0e9;
+      --paper: #f5f6f7;
+      --surface: #fff;
+      --ink: #172b3a;
+      --muted: #71808a;
+      --line: #e6eaed;
+      --steps: #f15a24;
+      --calories: #007b9e;
+      --water: #55a66c;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+
+    /* Phone frame, page scrolling, and shared typography. */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      display: grid;
+      min-height: 100vh;
+      margin: 0;
+      place-items: center;
+      background: #e9edf0;
+      color: var(--ink);
+    }
+    button,
+    input {
+      font: inherit;
+    }
+    button {
+      color: inherit;
+    }
+    .phone {
+      position: relative;
+      display: flex;
+      width: min(100%, 430px);
+      height: min(920px, 100dvh);
+      min-height: 620px;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--paper);
+      box-shadow: 0 22px 75px rgba(0, 35, 55, .19);
+    }
+    .status-bar {
+      display: flex;
+      height: 29px;
+      flex: 0 0 29px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      background: var(--navy);
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+    }
+    .signal {
+      letter-spacing: 1px;
+    }
+    .app-header {
+      display: flex;
+      min-height: 63px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      background: var(--navy);
+      color: white;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 19px;
+      font-weight: 750;
+      letter-spacing: -.55px;
+    }
+    .brand-mark {
+      display: grid;
+      width: 31px;
+      height: 31px;
+      place-items: center;
+      border-radius: 10px;
+      background: var(--orange);
+      color: white;
+      font-size: 17px;
+    }
+    .header-date {
+      color: #d3e0e7;
+      font-size: 11px;
+    }
+    .page-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 19px 17px 24px;
+      scrollbar-width: thin;
+    }
+    .page {
+      display: none;
+    }
+    .page.active {
+      display: block;
+    }
+    .eyebrow {
+      margin: 0 0 5px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      color: var(--navy);
+      font-size: 25px;
+      letter-spacing: -.75px;
+    }
+    .intro {
+      margin: 6px 0 17px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .card {
+      margin-bottom: 13px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .card-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .card-heading h2 {
+      margin: 0;
+      color: var(--navy);
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .card-heading p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .text-button {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--orange);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    /* Home page summaries, dropdowns, and weekly goal chart. */
+    .motto { margin: 0 0 15px; color: var(--navy); font-size: 11px; font-weight: 750; letter-spacing: .2px; }
+    .points-card { display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: #fff8f4; }
+    .points-card strong { color: var(--orange); font-size: 22px; }
+    .points-card span { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .points-mark { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 50%; background: var(--orange); color: white; font-size: 17px; font-weight: 800; }
+    .summary-card { display: block; width: 100%; cursor: pointer; color: inherit; text-align: left; transition: border-color .15s, transform .15s; }
+    .summary-card:hover { transform: translateY(-1px); border-color: #b9cbd4; }
+    .summary-card:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid rgba(0,123,158,.35); outline-offset: 2px; }
+    .summary-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .summary-title { display: block; color: var(--navy); font-size: 14px; font-weight: 700; }
+    .summary-subtitle { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+    .summary-arrow { color: var(--orange); font-size: 20px; }
+    .summary-copy { margin: 9px 0 0; color: var(--muted); font-size: 10px; }
+    .summary-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-top: 13px; }
+    .summary-metric { padding: 9px 7px; border-radius: 10px; background: #f4f7f8; }
+    .summary-metric strong { display: block; color: var(--navy); font-size: 14px; }
+    .summary-metric span { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
+    .home-dropdown { margin-bottom: 12px; padding: 0; overflow: hidden; }
+    .home-dropdown > summary { display: flex; min-height: 66px; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 15px; cursor: pointer; list-style: none; }
+    .home-dropdown > summary::-webkit-details-marker { display: none; }
+    .home-dropdown > summary::after { content: "+"; color: var(--orange); font-size: 21px; font-weight: 500; }
+    .home-dropdown[open] > summary::after { content: "−"; }
+    .dropdown-title { display: block; color: var(--navy); font-size: 14px; font-weight: 700; }
+    .dropdown-subtitle { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+    .dropdown-content { padding: 0 15px 15px; border-top: 1px solid var(--line); }
+    .home-dropdown .event-row:first-child { margin-top: 4px; }
+    .daily-goal-row { display: grid; grid-template-columns: 54px 66px minmax(30px,1fr) 29px; align-items: center; gap: 6px; margin-top: 12px; font-size: 9px; }
+    .daily-goal-label { color: #566671; }
+    .daily-goal-amount { color: var(--muted); font-size: 8px; white-space: nowrap; }
+    .daily-goal-track { height: 7px; overflow: hidden; border-radius: 99px; background: #e9eef1; }
+    .daily-goal-track span { display: block; width: 0; height: 100%; border-radius: inherit; transition: width .25s; }
+    .daily-goal-percent { color: var(--navy); font-weight: 700; text-align: right; }
+    .weekly-caption { margin: 0; color: var(--muted); font-size: 9px; text-align: center; }
+
+    /* Date selectors, activity controls, and meal/macro forms. */
+    .history-picker { display: grid; grid-template-columns: 1fr 145px; align-items: center; gap: 8px; margin-top: 12px; color: var(--muted); font-size: 10px; }
+    .history-picker input, .macro-input, .meal-form input, .general-goal-form input { width: 100%; min-width: 0; height: 38px; padding: 0 9px; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--ink); font-size: 11px; }
+    .value-editor { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 9px; margin-top: 10px; }
+    .value-editor label { color: var(--muted); font-size: 9px; }
+    .value-controls { display: flex; align-items: center; gap: 5px; }
+    .value-controls input { width: 85px; height: 34px; padding: 0 7px; border: 1px solid var(--line); border-radius: 8px; text-align: right; }
+    .small-adjust { width: 27px; height: 27px; border: 1px solid var(--line); border-radius: 8px; background: #f5f7f8; color: var(--navy); cursor: pointer; font-size: 16px; }
+    .macro-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-top: 12px; }
+    .macro-tile { padding: 9px; border-radius: 10px; background: #f4f7f8; }
+    .macro-tile strong { display: block; color: var(--navy); font-size: 12px; }
+    .macro-tile span { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
+    .macro-edit-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-top: 10px; }
+    .macro-edit-grid label { display: grid; gap: 4px; color: var(--muted); font-size: 9px; }
+    .meal-form { display: grid; gap: 9px; }
+    .meal-form .meal-fields { display: grid; grid-template-columns: minmax(0,1fr) repeat(3,58px); gap: 5px; }
+    .meal-form label { color: var(--muted); font-size: 8px; }
+    .meal-form input { height: 34px; }
+    .meal-list { display: grid; gap: 7px; margin-top: 10px; }
+    .meal-item { display: flex; justify-content: space-between; gap: 8px; padding: 9px; border-radius: 9px; background: #f4f7f8; font-size: 9px; }
+    .meal-item button { border: 0; background: none; color: var(--orange); cursor: pointer; }
+
+    /* Health summaries, trend charts, and personal goals. */
+    .health-note { margin: 9px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+    .health-overview { display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: center; }
+    .health-overview strong { color: var(--navy); font-size: 20px; }
+    .health-overview span { color: var(--muted); font-size: 9px; }
+    .trend-chart { display: block; width: 100%; height: 120px; margin-top: 12px; border-radius: 9px; background: #f7f9fa; }
+    .goal-estimate { margin-top: 10px; padding: 10px; border-radius: 9px; background: #f4f7f8; color: var(--navy); font-size: 10px; line-height: 1.45; }
+    .general-goal-form { display: grid; gap: 8px; }
+    .general-goal-form .goal-entry-grid { display: grid; grid-template-columns: minmax(0,1fr) 70px 70px; gap: 6px; }
+    .general-goal-list { display: grid; gap: 8px; margin-top: 10px; }
+    .general-goal-item { padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+    .general-goal-item h3 { margin: 0; color: var(--navy); font-size: 11px; }
+    .general-goal-item p { margin: 4px 0; color: var(--muted); font-size: 9px; }
+
+    /* Profile, navigation, and schedule components. */
+    .profile-select { width: 100%; height: 38px; padding: 0 9px; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--ink); }
+    .pie-wrap { display: grid; place-items: center; margin: 15px auto; }
+    .pie-chart { display: block; width: 178px; height: 178px; overflow: visible; }
+    .pie-slice { cursor: pointer; stroke: white; stroke-width: 2; transition: fill .2s, opacity .15s; }
+    .pie-slice:hover { opacity: .82; }
+    .goal-details { display: grid; gap: 10px; }
+    .detail-goal { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+    .detail-goal h3 { margin: 0; font-size: 12px; }
+    .detail-goal p { margin: 4px 0 0; color: var(--muted); font-size: 9px; }
+    .adjust-row { display: flex; align-items: center; gap: 6px; }
+    .adjust-row .goal-value { min-width: 57px; }
+    .target-form { display: grid; grid-template-columns: minmax(0,1fr) 94px; align-items: center; gap: 8px; margin-top: 11px; color: var(--muted); font-size: 10px; }
+    .target-form input, .profile-field input { width: 100%; min-width: 0; height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--ink); }
+    .profile-form { display: grid; gap: 12px; }
+    .profile-field { display: grid; gap: 6px; color: var(--ink); font-size: 10px; font-weight: 650; }
+    .profile-field small { color: var(--muted); font-size: 9px; font-weight: 400; }
+    .bmi-panel { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding: 13px; border-radius: 12px; background: #f4f7f8; }
+    .bmi-panel strong { color: var(--navy); font-size: 21px; }
+    .bmi-panel span { color: var(--muted); font-size: 10px; }
+    .quote-card { padding: 13px 15px; background: #eef4f7; }
+    .quote-card p { margin: 0; color: var(--navy); font-size: 11px; font-weight: 650; line-height: 1.55; }
+    .quote-card span { display: block; margin-top: 6px; color: var(--muted); font-size: 9px; }
+    .back-button { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 15px; padding: 0; border: 0; background: none; color: var(--orange); cursor: pointer; font-size: 11px; font-weight: 700; }
+    .goal-legend { display: grid; gap: 12px; }
+    .legend-row { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: center; gap: 7px; font-size: 10px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .legend-label { color: #566671; }
+    .legend-percent { color: var(--navy); font-size: 10px; font-weight: 700; }
+    .goal-value { min-width: 51px; color: var(--navy); font-size: 10px; font-weight: 700; text-align: right; }
+    .add-button { width: 27px; height: 27px; border: 1px solid #f5c5b0; border-radius: 9px; background: var(--orange-soft); color: #c74417; cursor: pointer; font-size: 17px; line-height: 1; }
+    .event-row { display: grid; grid-template-columns: 49px 3px minmax(0,1fr); align-items: center; gap: 10px; min-height: 53px; border-top: 1px solid var(--line); }
+    .event-time { color: var(--navy); font-size: 10px; font-weight: 700; }
+    .event-bar { width: 3px; height: 31px; border-radius: 3px; background: var(--orange); }
+    .event-bar.blue { background: var(--calories); }
+    .event-bar.green { background: var(--water); }
+    .event-info strong { display: block; font-size: 11px; }
+    .event-info span { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .bottom-nav { display: grid; flex: 0 0 67px; grid-template-columns: repeat(4, 1fr); padding: 6px 10px max(6px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: white; }
+    .nav-button { display: grid; justify-items: center; align-content: center; gap: 4px; border: 0; border-radius: 11px; background: none; color: #84919a; cursor: pointer; font-size: 9px; }
+    .nav-button.active { color: var(--navy); font-weight: 700; }
+    .nav-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+    .week-strip { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; margin-top: 14px; }
+    .week-day { display: grid; justify-items: center; gap: 7px; padding: 8px 2px; border-radius: 11px; color: var(--muted); font-size: 9px; }
+    .week-day strong { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; color: var(--ink); font-size: 10px; }
+    .week-day.selected { background: var(--orange-soft); color: #c74417; font-weight: 700; }
+    .week-day.selected strong { background: var(--orange); color: white; }
+    .week-day i { width: 4px; height: 4px; margin-top: -4px; border-radius: 50%; background: var(--navy); }
+    .summary-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
+    .summary-stat { padding: 11px; border-radius: 11px; background: #f4f7f8; }
+    .summary-stat strong { display: block; color: var(--navy); font-size: 18px; }
+    .summary-stat span { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .schedule-day-title { margin: 2px 0 10px; color: var(--navy); font-size: 13px; font-weight: 700; }
+    .schedule-list { display: grid; }
+    .schedule-list .event-row:first-child { border-top: 0; }
+    .todo-list { display: grid; gap: 2px; margin-top: 10px; }
+    .todo-item { display: flex; align-items: center; gap: 10px; min-height: 42px; border-top: 1px solid var(--line); color: #41515c; font-size: 11px; }
+    .todo-item input { width: 16px; height: 16px; accent-color: var(--orange); }
+    .todo-item.done span { color: #97a1a7; text-decoration: line-through; }
+    .todo-count { color: var(--muted); font-size: 10px; }
+    .toast { position: absolute; z-index: 5; right: 18px; bottom: 80px; left: 18px; padding: 12px 15px; transform: translateY(8px); border-radius: 12px; background: var(--navy-dark); color: white; opacity: 0; pointer-events: none; text-align: center; font-size: 11px; transition: .2s; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    /* Responsive sizing keeps the same app comfortable on small and large screens. */
+    @media (min-width: 500px) {
+      .phone { height: min(900px, calc(100dvh - 36px)); min-height: 640px; border: 7px solid #172b3a; border-radius: 34px; }
+      .status-bar { border-radius: 26px 26px 0 0; }
+      .app-header { padding-right: 19px; padding-left: 19px; }
+    }
+    @media (max-width: 360px) {
+      .page-content { padding-right: 12px; padding-left: 12px; }
+      .pie-chart { width: 155px; height: 155px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- The phone shell is shared by all app pages; only one page section is shown at a time. -->
+  <div class="phone">
+    <div class="status-bar"><span id="clock">9:41</span><span class="status-icons"><span class="signal">●●●</span><span>Wi-Fi</span><span>▰</span></span></div>
+    <header class="app-header">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">T</span>Trailblazer</div>
+      <div class="header-date" id="headerDate">Today</div>
+    </header>
+    <main class="page-content">
+      <!-- Home: at-a-glance schedule, weekly goal slices, daily metrics, and points. -->
+      <section class="page active" id="homePage" aria-labelledby="homeTitle">
+        <p class="eyebrow" id="greeting">YOUR DAY, YOUR PACE</p>
+        <h1 id="homeTitle">Good morning, Jordan</h1>
+        <p class="intro">A little movement goes a long way. Here's your day at a glance.</p>
+        <p class="motto">Made by Students for Student</p>
+        <article class="card points-card" aria-label="Trail points">
+          <div><strong id="pointsTotal">0 pts</strong><span>Trail points earned · 25 points per completed goal</span></div>
+          <div class="points-mark" aria-hidden="true">★</div>
+        </article>
+        <details class="card home-dropdown" id="homeScheduleDropdown">
+          <summary><span><strong class="dropdown-title">Schedule</strong><span class="dropdown-subtitle" id="homeScheduleSummary">Today's classes and workouts</span></span></summary>
+          <div class="dropdown-content">
+            <div class="card-heading" style="margin-top:13px"><div><h2 id="homeScheduleDate">Today's schedule</h2><p>Classes and workouts by time</p></div><button class="text-button" type="button" data-page="schedule">Full week</button></div>
+            <div class="schedule-list">
+              <div class="event-row"><span class="event-time">9:00 AM</span><i class="event-bar blue"></i><div class="event-info"><strong>English Composition</strong><span>CAS 101 · 50 min</span></div></div>
+              <div class="event-row"><span class="event-time">10:00 AM</span><i class="event-bar blue"></i><div class="event-info"><strong>Biology 1301</strong><span>Science Building 204 · 1 hr</span></div></div>
+              <div class="event-row"><span class="event-time">1:00 PM</span><i class="event-bar green"></i><div class="event-info"><strong>Study break walk</strong><span>Campus loop · 20 min</span></div></div>
+              <div class="event-row"><span class="event-time">4:30 PM</span><i class="event-bar"></i><div class="event-info"><strong>Campus gym</strong><span>Workout · 45 min</span></div></div>
+            </div>
+          </div>
+        </details>
+        <details class="card home-dropdown" id="homeGoalsDropdown">
+          <summary><span><strong class="dropdown-title">Goals</strong><span class="dropdown-subtitle" id="homeGoalSummary">Weekly progress · tap a pie slice for details</span></span></summary>
+          <div class="dropdown-content">
+            <div class="pie-wrap"><svg class="pie-chart" id="homeGoalChart" viewBox="0 0 180 180" role="group" aria-label="Weekly goal progress pie chart"></svg></div>
+            <p class="weekly-caption" id="homeWeekRange">This week's progress</p>
+            <div class="goal-legend">
+              <div class="legend-row"><i class="legend-dot" style="background:var(--steps)"></i><span class="legend-label">Steps taken · weekly</span><strong class="legend-percent" id="homeStepsPercent">0%</strong></div>
+              <div class="legend-row"><i class="legend-dot" style="background:var(--calories)"></i><span class="legend-label">Calories burnt · weekly</span><strong class="legend-percent" id="homeCaloriesPercent">0%</strong></div>
+              <div class="legend-row"><i class="legend-dot" style="background:var(--water)"></i><span class="legend-label">Water drank · weekly</span><strong class="legend-percent" id="homeWaterPercent">0%</strong></div>
+            </div>
+            <p class="summary-copy">Weekly targets are your daily goals multiplied by 7.</p>
+          </div>
+        </details>
+        <details class="card home-dropdown" id="homeMetricsDropdown">
+          <summary><span><strong class="dropdown-title">Metrics</strong><span class="dropdown-subtitle">Daily progress toward each goal</span></span></summary>
+          <div class="dropdown-content">
+            <div class="daily-goal-row"><span class="daily-goal-label">Steps</span><span class="daily-goal-amount" id="homeStepsMetricAmount">0 / 8,000</span><div class="daily-goal-track"><span id="homeStepsBar" style="background:var(--steps)"></span></div><strong class="daily-goal-percent" id="homeStepsMetricPercent">0%</strong></div>
+            <div class="daily-goal-row"><span class="daily-goal-label">Calories</span><span class="daily-goal-amount" id="homeCaloriesMetricAmount">0 / 500</span><div class="daily-goal-track"><span id="homeCaloriesBar" style="background:var(--calories)"></span></div><strong class="daily-goal-percent" id="homeCaloriesMetricPercent">0%</strong></div>
+            <div class="daily-goal-row"><span class="daily-goal-label">Water</span><span class="daily-goal-amount" id="homeWaterMetricAmount">0 / 2,000 ml</span><div class="daily-goal-track"><span id="homeWaterBar" style="background:var(--water)"></span></div><strong class="daily-goal-percent" id="homeWaterMetricPercent">0%</strong></div>
+            <button class="text-button" type="button" data-page="metrics" style="margin-top:13px">Metric details ↗</button>
+          </div>
+        </details>
+        <article class="card quote-card"><p id="dailyQuote">Move well, study well, play well, eat well, rest well.</p><span>A Trailblazer reminder</span></article>
+      </section>
+
+      <!-- Schedule: weekly overview, day-by-day records, and the editable to-do list. -->
+      <section class="page" id="schedulePage" aria-labelledby="scheduleTitle">
+        <p class="eyebrow">YOUR CAMPUS WEEK</p>
+        <h1 id="scheduleTitle">Schedule</h1>
+        <p class="intro">Classes and workouts, all in one place.</p>
+        <article class="card">
+          <div class="card-heading"><div><h2>Weekly summary</h2><p><span id="weekRange"></span> · Fall semester</p></div></div>
+          <div class="week-strip" aria-label="Week of October 19">
+            <div class="week-day"><span>Mon</span><strong></strong><i></i></div>
+            <div class="week-day"><span>Tue</span><strong></strong><i></i></div>
+            <div class="week-day"><span>Wed</span><strong></strong><i></i></div>
+            <div class="week-day"><span>Thu</span><strong></strong><i></i></div>
+            <div class="week-day"><span>Fri</span><strong></strong><i></i></div>
+            <div class="week-day"><span>Sat</span><strong></strong></div>
+            <div class="week-day"><span>Sun</span><strong></strong></div>
+          </div>
+          <div class="summary-stats">
+            <div class="summary-stat"><strong>12</strong><span>classes this week</span></div>
+            <div class="summary-stat"><strong>3</strong><span>workouts planned</span></div>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-heading"><div><h2 id="scheduleDayTitle">Today's schedule</h2><p>Classes and workouts</p></div></div>
+          <label class="history-picker" for="historyDate"><span>View or edit a past day</span><input id="historyDate" type="date"></label>
+          <p class="health-note" id="historyDaySummary">Showing today's schedule and records.</p>
+          <div class="schedule-list">
+            <div class="event-row"><span class="event-time">9:00 AM</span><i class="event-bar blue"></i><div class="event-info"><strong>English Composition</strong><span>CAS 101 · 50 min</span></div></div>
+            <div class="event-row"><span class="event-time">10:00 AM</span><i class="event-bar blue"></i><div class="event-info"><strong>Biology 1301</strong><span>Science Building 204 · 1 hr</span></div></div>
+            <div class="event-row"><span class="event-time">1:00 PM</span><i class="event-bar green"></i><div class="event-info"><strong>Study break walk</strong><span>Campus loop · 20 min</span></div></div>
+            <div class="event-row"><span class="event-time">4:30 PM</span><i class="event-bar"></i><div class="event-info"><strong>Campus gym</strong><span>Workout · 45 min</span></div></div>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-heading"><div><h2>To do today</h2><p>Small tasks, steady progress</p></div><span class="todo-count" id="todoCount">0 of 4 done</span></div>
+          <div class="todo-list" id="scheduleTodoList">
+            <label class="todo-item"><input type="checkbox"><span>Review biology lecture notes</span></label>
+            <label class="todo-item"><input type="checkbox"><span>Submit English reading response</span></label>
+            <label class="todo-item"><input type="checkbox"><span>Pack water bottle for the gym</span></label>
+            <label class="todo-item"><input type="checkbox"><span>Set out clothes for tomorrow</span></label>
+          </div>
+          <details class="home-dropdown" id="historyRecords">
+            <summary><span><strong class="dropdown-title">Recorded for this day</strong><span class="dropdown-subtitle">Activity, meals, and completed tasks</span></span></summary>
+            <div class="dropdown-content" id="historyRecordDetails"></div>
+          </details>
+        </article>
+      </section>
+
+      <!-- Metrics: daily activity, macro estimates, and meals for the selected date. -->
+      <section class="page" id="metricsPage" aria-labelledby="metricsTitle">
+        <button class="back-button" type="button" data-page="home">‹ Home</button>
+        <p class="eyebrow">YOUR DAILY MOVEMENT</p>
+        <h1 id="metricsTitle">Metrics</h1>
+        <p class="intro">Track activity as you go. Your progress updates your goal chart.</p>
+        <article class="card">
+          <div class="card-heading">
+            <div>
+              <h2 id="metricsDayTitle">Today's activity</h2>
+              <p>Daily totals · use +/− or enter a value</p>
+            </div>
+          </div>
+          <label class="history-picker" for="metricsDate"><span>Activity date</span><input id="metricsDate" type="date"></label>
+          <div class="goal-details">
+            <div class="detail-goal">
+              <div>
+                <h3>Steps taken</h3>
+                <p id="metricsStepsDetail">0 of 8,000 steps</p>
+              </div>
+              <div class="value-controls">
+                <button class="small-adjust" type="button" data-decrease="steps" aria-label="Subtract steps">−</button>
+                <input type="number" min="0" step="100" data-manual="steps" aria-label="Steps taken">
+                <button class="add-button" type="button" data-goal="steps" aria-label="Add 500 steps">+</button>
+              </div>
+            </div>
+            <div class="detail-goal">
+              <div>
+                <h3>Calories burnt</h3>
+                <p id="metricsCaloriesDetail">0 of 500 kcal</p>
+              </div>
+              <div class="value-controls">
+                <button class="small-adjust" type="button" data-decrease="calories" aria-label="Subtract calories burnt">−</button>
+                <input type="number" min="0" step="1" data-manual="calories" aria-label="Calories burnt">
+                <button class="add-button" type="button" data-goal="calories" aria-label="Add 50 calories burnt">+</button>
+              </div>
+            </div>
+            <div class="detail-goal">
+              <div>
+                <h3>Water drank</h3>
+                <p id="metricsWaterDetail">0 of 2,000 ml</p>
+              </div>
+              <div class="value-controls">
+                <button class="small-adjust" type="button" data-decrease="water" aria-label="Subtract water">−</button>
+                <input type="number" min="0" step="50" data-manual="water" aria-label="Water drank in milliliters">
+                <button class="add-button" type="button" data-goal="water" aria-label="Add 250 milliliters of water">+</button>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-heading">
+            <div>
+              <h2>Daily macro guide</h2>
+              <p>Personalized estimates from your profile</p>
+            </div>
+          </div>
+          <p class="summary-copy" id="macroCalorieSummary">Add profile details for a personalized estimate.</p>
+          <div class="macro-grid">
+            <div class="macro-tile"><strong id="macroProtein">—</strong><span>Protein target</span></div>
+            <div class="macro-tile"><strong id="macroCarbs">—</strong><span>Carb target</span></div>
+            <div class="macro-tile"><strong id="macroFat">—</strong><span>Fat target</span></div>
+          </div>
+          <div class="macro-edit-grid">
+            <label>Protein eaten (g)<input class="macro-input" type="number" min="0" data-macro="protein"></label>
+            <label>Carbs eaten (g)<input class="macro-input" type="number" min="0" data-macro="carbs"></label>
+            <label>Fat eaten (g)<input class="macro-input" type="number" min="0" data-macro="fat"></label>
+          </div>
+          <div class="macro-grid">
+            <div class="macro-tile"><strong id="eatenProtein">0 g</strong><span>Protein eaten</span></div>
+            <div class="macro-tile"><strong id="eatenCarbs">0 g</strong><span>Carbs eaten</span></div>
+            <div class="macro-tile"><strong id="eatenFat">0 g</strong><span>Fat eaten</span></div>
+          </div>
+          <p class="health-note">Macro split uses a general 50% carbohydrate / 25% protein / 25% fat estimate. It is not a meal prescription; adjust to your needs with a qualified professional.</p>
+        </article>
+        <details class="card home-dropdown" id="mealsDropdown">
+          <summary><span><strong class="dropdown-title">Meals</strong><span class="dropdown-subtitle">Add meals and their macro amounts</span></span></summary>
+          <div class="dropdown-content">
+            <form class="meal-form" id="mealForm"><div class="meal-fields"><label>Meal<input name="name" required maxlength="40" placeholder="e.g. Lunch"></label><label>Protein g<input name="protein" type="number" min="0" step="1" value="0" required></label><label>Carbs g<input name="carbs" type="number" min="0" step="1" value="0" required></label><label>Fat g<input name="fat" type="number" min="0" step="1" value="0" required></label></div><button class="primary-button" type="submit">+ Add meal</button></form>
+            <div class="meal-list" id="mealList"></div>
+          </div>
+        </details>
+      </section>
+      <!-- Goals: weekly pie visualization and the selected goal's daily controls. -->
+      <section class="page" id="goalsPage" aria-labelledby="goalsTitle">
+        <button class="back-button" type="button" data-page="home">‹ Home</button>
+        <p class="eyebrow">YOUR PROGRESS</p>
+        <h1 id="goalsTitle">Goal chart</h1>
+        <p class="intro">Each slice fills as you work toward that goal. Tap a slice to adjust its target.</p>
+        <article class="card">
+          <div class="card-heading"><div><h2>Weekly goals</h2><p>Each color represents one goal</p></div><button class="text-button" id="resetGoals" type="button">Reset today</button></div>
+          <div class="pie-wrap"><svg class="pie-chart" id="goalChart" viewBox="0 0 180 180" role="group" aria-label="Goal progress pie chart"></svg></div>
+          <p class="weekly-caption" id="goalPageWeekRange">This week's progress</p>
+          <div class="goal-legend">
+            <div class="legend-row"><i class="legend-dot" style="background:var(--steps)"></i><span class="legend-label">Steps taken · weekly</span><strong class="legend-percent" id="stepsPercent">0%</strong></div>
+            <div class="legend-row"><i class="legend-dot" style="background:var(--calories)"></i><span class="legend-label">Calories burnt · weekly</span><strong class="legend-percent" id="caloriesPercent">0%</strong></div>
+            <div class="legend-row"><i class="legend-dot" style="background:var(--water)"></i><span class="legend-label">Water drank · weekly</span><strong class="legend-percent" id="waterPercent">0%</strong></div>
+          </div>
+        </article>
+        <article class="card points-card"><div><strong id="goalsPoints">0 pts</strong><span>25 Trail points for each goal completed today</span></div><div class="points-mark" aria-hidden="true">★</div></article>
+      </section>
+      <!-- Goal detail: edit one goal's target and add progress toward it. -->
+      <section class="page" id="goalDetailPage" aria-labelledby="goalDetailTitle">
+        <button class="back-button" type="button" data-page="goals">‹ Goal chart</button>
+        <p class="eyebrow">DAILY GOAL DETAILS</p>
+        <h1 id="goalDetailTitle">Steps taken</h1>
+        <p class="intro" id="goalDetailIntro">Your daily progress, with a target you can change.</p>
+        <article class="card">
+          <div class="card-heading"><div><h2 id="goalDetailProgress">0 of 8,000</h2><p id="goalDetailPercent">0% complete</p></div></div>
+          <div class="target-form"><label id="goalTargetLabel" for="goalTarget">Daily target</label><input id="goalTarget" type="number" min="1" max="1000000" step="1"></div>
+          <div class="adjust-row" style="justify-content:space-between;margin-top:14px"><span class="summary-copy">Record progress</span><button class="add-button" id="detailAdd" type="button" aria-label="Add progress">+</button></div>
+        </article>
+        <article class="card"><div class="card-heading"><div><h2>Trail points</h2><p>Points are awarded once when you complete this goal each day.</p></div><strong id="goalDetailPoints">+25 pts</strong></div></article>
+      </section>
+      <!-- Profile: health context, weight history, and user-defined goals. -->
+      <section class="page" id="profilePage" aria-labelledby="profileTitle">
+        <p class="eyebrow">YOUR PERSONAL DETAILS</p>
+        <h1 id="profileTitle">Profile</h1>
+        <p class="intro">Keep your height, weight, and age together for personal tracking.</p>
+        <article class="card">
+          <div class="card-heading"><div><h2>About you</h2><p>Only used to personalize your dashboard</p></div></div>
+          <form class="profile-form" id="profileForm">
+            <label class="profile-field" for="profileHeight">
+              Height <small>Centimeters</small>
+              <input id="profileHeight" name="height" type="number" min="1" max="280" step="0.1" placeholder="e.g. 170">
+            </label>
+            <label class="profile-field" for="profileWeight">
+              Weight <small>Kilograms</small>
+              <input id="profileWeight" name="weight" type="number" min="1" max="500" step="0.1" placeholder="e.g. 68">
+            </label>
+            <label class="profile-field" for="profileAge">
+              Age <small>Years</small>
+              <input id="profileAge" name="age" type="number" min="1" max="120" step="1" placeholder="e.g. 20">
+            </label>
+            <label class="profile-field" for="profileEquation">
+              Metabolic equation <small>Only used to estimate BMR</small>
+              <select class="profile-select" id="profileEquation" name="equation">
+                <option value="">Not specified</option>
+                <option value="female">Female equation</option>
+                <option value="male">Male equation</option>
+              </select>
+            </label>
+            <label class="profile-field" for="profileActivity">
+              Typical activity <small>Used for estimated daily calorie needs</small>
+              <select class="profile-select" id="profileActivity" name="activity">
+                <option value="1.2">Mostly sitting / little exercise</option>
+                <option value="1.375">Light activity, 1–3 days/week</option>
+                <option value="1.55">Moderate activity, 3–5 days/week</option>
+                <option value="1.725">High activity, 6–7 days/week</option>
+                <option value="1.9">Very high activity</option>
+              </select>
+            </label>
+          </form>
+          <div class="bmi-panel"><span>Body mass index (BMI)<br><span id="bmiContext">For personal tracking only</span></span><strong id="bmiValue">—</strong></div>
+          <p class="summary-copy" id="profileMeasurementSummary">Add your height, weight, and age to complete your profile.</p>
+          <div class="health-overview" style="margin-top:13px"><div><strong id="healthOverviewLabel">Tracked wellness progress</strong><span id="healthOverviewText">Add profile details and daily records to see a general snapshot.</span></div><strong id="healthOverviewScore">—</strong></div>
+          <p class="health-note">This is a general, non-diagnostic snapshot. BMI is an imperfect screening measure, not a diagnosis. Calorie and macro estimates vary by individual.</p>
+          <p class="health-note">Methods: <a href="https://www.calculator.net/bmi-calculator.html" target="_blank" rel="noopener noreferrer">BMI</a>, <a href="https://www.calculator.net/bmr-calculator.html" target="_blank" rel="noopener noreferrer">BMR</a>, <a href="https://www.calculator.net/calorie-calculator.html" target="_blank" rel="noopener noreferrer">calorie needs</a>, <a href="https://www.calculator.net/macro-calculator.html" target="_blank" rel="noopener noreferrer">macros</a>.</p>
+        </article>
+        <article class="card">
+          <div class="card-heading"><div><h2>Weight goal & trend</h2><p>Log weigh-ins for a trend-based estimate</p></div></div>
+          <label class="history-picker" for="profileDate"><span>Measurement date</span><input id="profileDate" type="date"></label>
+          <div class="target-form"><label for="weightGoal">Desired weight (kg)</label><input id="weightGoal" type="number" min="1" max="500" step="0.1" placeholder="Optional"></div>
+          <div class="target-form"><label for="weightEntry">Log weight (kg)</label><input id="weightEntry" type="number" min="1" max="500" step="0.1" placeholder="e.g. 68"></div>
+          <button class="primary-button" type="button" id="logWeight" style="margin-top:9px">Save weigh-in</button>
+          <svg class="trend-chart" id="weightChart" viewBox="0 0 320 120" role="img" aria-label="Weight trend chart"></svg>
+          <p class="goal-estimate" id="weightEstimate">Add weigh-ins on different dates to estimate a trend toward your goal.</p>
+        </article>
+        <article class="card">
+          <div class="card-heading"><div><h2>Personal goals</h2><p>Track measurable goals and estimated timelines</p></div></div>
+          <form class="general-goal-form" id="generalGoalForm"><div class="goal-entry-grid"><input name="name" required maxlength="36" placeholder="Goal (e.g. read pages)"><input name="target" type="number" min="1" required placeholder="Target"><input name="unit" maxlength="12" required placeholder="Unit"></div><button class="primary-button" type="submit">+ Add personal goal</button></form>
+          <div class="general-goal-list" id="generalGoalList"></div>
+        </article>
+        <article class="card quote-card"><p>Move well, study well, play well, eat well, rest well.</p><span>Made by Students for Student</span></article>
+      </section>
+    </main>
+
+    <!-- Persistent app navigation and a shared, screen-reader-friendly toast. -->
+    <nav class="bottom-nav" aria-label="Main navigation">
+      <button class="nav-button active" type="button" data-page="home" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>Home
+      </button>
+      <button class="nav-button" type="button" data-page="schedule">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>Schedule
+      </button>
+      <button class="nav-button" type="button" data-page="metrics">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Metrics
+      </button>
+      <button class="nav-button" type="button" data-page="profile">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Profile
+      </button>
+    </nav>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+  <script>
+    // Date and persistence setup: daily records are keyed by local calendar date.
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const savedState = JSON.parse(localStorage.getItem("trailblazer-state") || "{}");
+    const savedToday = savedState.today === todayKey ? savedState : {};
+    const dailyHistory =
+      savedState.dailyHistory && typeof savedState.dailyHistory === "object"
+        ? savedState.dailyHistory
+        : {};
+    if (!dailyHistory[todayKey]) {
+      dailyHistory[todayKey] = {
+        values: savedToday.values || { steps: 0, calories: 0, water: 0 },
+        macros: { protein: 0, carbs: 0, fat: 0 },
+        meals: [],
+        todos: [false, false, false, false],
+        completed: savedToday.completed || []
+      };
+    }
+    let selectedDate = todayKey;
+    const weekDate = new Date(now);
+    weekDate.setHours(0, 0, 0, 0);
+    weekDate.setDate(now.getDate() - (now.getDay() + 6) % 7);
+    const weekKey = `${weekDate.getFullYear()}-${String(weekDate.getMonth() + 1).padStart(2, "0")}-${String(weekDate.getDate()).padStart(2, "0")}`;
+    const savedWeekValues = savedState.weekStart === weekKey ? savedState.weekValues : {};
+    const validNumber = (value, fallback, min, max) =>
+      Number.isFinite(value) && value >= min && value <= max ? value : fallback;
+    const todayRecord = dailyHistory[todayKey];
+
+    // Editable app state: goal metadata, user profile, nutrition, and goal histories.
+    // Add a tracked goal here and add its matching controls and summary labels in the HTML.
+    const goals = {
+      steps: {
+        value: validNumber(todayRecord.values?.steps, 0, 0, 1000000),
+        weekValue: validNumber(savedWeekValues?.steps, 0, 0, 7000000),
+        target: validNumber(savedState.targets?.steps, 8000, 1, 1000000),
+        increment: 500,
+        label: "Steps taken",
+        unit: "steps",
+        color: "#f15a24",
+        pale: "#fde4d8"
+      },
+      calories: {
+        value: validNumber(todayRecord.values?.calories, 0, 0, 100000),
+        weekValue: validNumber(savedWeekValues?.calories, 0, 0, 700000),
+        target: validNumber(savedState.targets?.calories, 500, 1, 100000),
+        increment: 50,
+        label: "Calories burnt",
+        unit: "kcal",
+        color: "#007b9e",
+        pale: "#d8f0f5"
+      },
+      water: {
+        value: validNumber(todayRecord.values?.water, 0, 0, 100000),
+        weekValue: validNumber(savedWeekValues?.water, 0, 0, 700000),
+        target: validNumber(savedState.targets?.water, 2000, 1, 100000),
+        increment: 250,
+        label: "Water drank",
+        unit: "ml",
+        color: "#55a66c",
+        pale: "#e0f2e3"
+      }
+    };
+    let completedToday = new Set(
+      Array.isArray(todayRecord.completed)
+        ? todayRecord.completed.filter(key => Object.hasOwn(goals, key))
+        : []
+    );
+    let totalPoints = validNumber(savedState.points, 0, 0, Number.MAX_SAFE_INTEGER);
+    const profile = {
+      height: validNumber(savedState.profile?.height, 0, 0, 280),
+      weight: validNumber(savedState.profile?.weight, 0, 0, 500),
+      age: validNumber(savedState.profile?.age, 0, 0, 120),
+      equation: ["female", "male"].includes(savedState.profile?.equation) ? savedState.profile.equation : "",
+      activity: validNumber(savedState.profile?.activity, 1.2, 1.2, 1.9)
+    };
+    let dailyMacros = {
+      protein: validNumber(todayRecord.macros?.protein, 0, 0, 10000),
+      carbs: validNumber(todayRecord.macros?.carbs, 0, 0, 10000),
+      fat: validNumber(todayRecord.macros?.fat, 0, 0, 10000)
+    };
+    let meals = Array.isArray(todayRecord.meals) ? todayRecord.meals : [];
+    let weightGoal = validNumber(savedState.weightGoal, 0, 0, 500);
+    let weighIns = Array.isArray(savedState.weighIns)
+      ? savedState.weighIns.filter(item =>
+          item &&
+          /^\d{4}-\d{2}-\d{2}$/.test(item.date) &&
+          Number.isFinite(item.weight) &&
+          item.weight > 0 &&
+          item.weight <= 500
+        )
+      : [];
+    let generalGoals = Array.isArray(savedState.generalGoals)
+      ? savedState.generalGoals
+          .filter(goal =>
+            goal &&
+            typeof goal.name === "string" &&
+            typeof goal.unit === "string" &&
+            Number.isFinite(goal.target) &&
+            goal.target > 0
+          )
+          .map(goal => ({
+            id: typeof goal.id === "string" ? goal.id : String(Date.now()),
+            name: goal.name,
+            unit: goal.unit,
+            target: goal.target,
+            value: validNumber(goal.value, 0, 0, 100000000),
+            history: Array.isArray(goal.history)
+              ? goal.history.filter(point =>
+                  point &&
+                  /^\d{4}-\d{2}-\d{2}$/.test(point.date) &&
+                  Number.isFinite(point.value) &&
+                  point.value >= 0
+                )
+              : []
+          }))
+      : [];
+
+    // Shared helpers and persistence keep history, weekly totals, and current values in sync.
+    const formatNumber = value => new Intl.NumberFormat().format(value);
+    const percentFor = goal =>
+      Math.min(100, Math.floor(goal.value / goal.target * 100));
+    const weeklyPercentFor = goal =>
+      Math.min(100, Math.round(goal.weekValue / (goal.target * 7) * 100));
+    const goalKeys = Object.keys(goals);
+    function currentRecord() {
+      const existing = dailyHistory[selectedDate] || {};
+      existing.values = Object.fromEntries(goalKeys.map(key => [key, goals[key].value]));
+      existing.macros = { ...dailyMacros };
+      existing.meals = meals;
+      existing.todos = [
+        ...document.querySelectorAll("#scheduleTodoList .todo-item input")
+      ].map(input => input.checked);
+      existing.completed = [...completedToday];
+      dailyHistory[selectedDate] = existing;
+      return existing;
+    }
+    function recalculateWeeklyValues() {
+      goalKeys.forEach(key => {
+        goals[key].weekValue = Object.entries(dailyHistory).reduce((sum, [date, record]) => {
+          if (date < weekKey || date > todayKey) return sum;
+          return sum + validNumber(
+            record.values?.[key],
+            0,
+            0,
+            10000000
+          );
+        }, 0);
+      });
+    }
+    function saveState() {
+      currentRecord();
+      localStorage.setItem("trailblazer-state", JSON.stringify({
+        today: todayKey,
+        weekStart: weekKey,
+        values: Object.fromEntries(goalKeys.map(key => [key, goals[key].value])),
+        weekValues: Object.fromEntries(goalKeys.map(key => [key, goals[key].weekValue])),
+        targets: Object.fromEntries(goalKeys.map(key => [key, goals[key].target])),
+        completed: [...completedToday],
+        points: totalPoints,
+        profile,
+        dailyHistory,
+        weightGoal,
+        weighIns,
+        generalGoals
+      }));
+    }
+
+    // Goal chart rendering: convert each goal's weekly completion into one colored pie slice.
+    function polarPoint(angle, radius = 84) {
+      const radians = angle * Math.PI / 180;
+      return { x: 90 + radius * Math.cos(radians), y: 90 + radius * Math.sin(radians) };
+    }
+    function sectorPath(start, end) {
+      const center = "M 90 90";
+      const first = polarPoint(start);
+      const last = polarPoint(end);
+      const largeArc = end - start > 180 ? 1 : 0;
+      return `${center} L ${first.x} ${first.y} A 84 84 0 ${largeArc} 1 ${last.x} ${last.y} Z`;
+    }
+    function drawGoalChart() {
+      ["homeGoalChart", "goalChart"].forEach(chartId => {
+        const chart = document.getElementById(chartId);
+        chart.replaceChildren();
+        goalKeys.forEach((key, index) => {
+          const goal = goals[key];
+          const percent = weeklyPercentFor(goal);
+          const start = -90 + index * 120 + 1.5;
+          const end = -90 + (index + 1) * 120 - 1.5;
+          const fillEnd = start + (end - start) * percent / 100;
+          const base = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          base.setAttribute("d", sectorPath(start, end));
+          base.setAttribute("fill", goal.pale);
+          base.setAttribute("class", "pie-slice");
+          base.setAttribute("role", "button");
+          base.setAttribute("tabindex", "0");
+          base.setAttribute("aria-label", `${goal.label}, ${percent} percent of this week's goal. Open goal details.`);
+          base.dataset.goal = key;
+          chart.append(base);
+          if (percent > 0) {
+            const progress = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            progress.setAttribute("d", sectorPath(start, fillEnd));
+            progress.setAttribute("fill", goal.color);
+            progress.setAttribute("class", "pie-slice");
+            progress.setAttribute("role", "button");
+            progress.setAttribute("tabindex", "0");
+            progress.setAttribute("aria-label", `${goal.label}, ${percent} percent of this week's goal. Open goal details.`);
+            progress.dataset.goal = key;
+            chart.append(progress);
+          }
+        });
+      });
+    }
+
+    // Health calculations: provide contextual estimates, never a medical diagnosis or prescription.
+    function updateProfileSummary() {
+      const { height, weight } = profile;
+      const bmi = height > 0 && weight > 0 ? weight / ((height / 100) ** 2) : 0;
+      document.getElementById("bmiValue").textContent = bmi ? bmi.toFixed(1) : "—";
+      document.getElementById("bmiContext").textContent = !bmi
+        ? "For personal tracking only"
+        : profile.age < 20
+          ? "Adult ranges do not apply under age 20"
+          : bmi < 18.5
+            ? "Below adult reference range"
+            : bmi < 25
+              ? "Within adult reference range"
+              : bmi < 30
+                ? "Above adult reference range"
+                : "Outside adult reference range";
+      document.getElementById("profileMeasurementSummary").textContent =
+        profile.age
+          ? `Age ${profile.age} · ${height || "—"} cm · ${weight || "—"} kg`
+          : "Add your height, weight, and age to complete your profile.";
+      updateMacroGuide();
+      updateHealthOverview();
+      updateWeightEstimate();
+    }
+    function calorieEstimate() {
+      if (
+        !profile.height ||
+        !profile.weight ||
+        !profile.age ||
+        profile.age < 18 ||
+        !profile.equation
+      ) {
+        return null;
+      }
+      const bmr =
+        10 * profile.weight +
+        6.25 * profile.height -
+        5 * profile.age +
+        (profile.equation === "male" ? 5 : -161);
+      return { bmr: Math.round(bmr), tdee: Math.round(bmr * profile.activity) };
+    }
+    function macroTargets() {
+      const estimate = calorieEstimate();
+      if (!estimate) return null;
+      return {
+        calories: estimate.tdee,
+        protein: Math.round(estimate.tdee * 0.25 / 4),
+        carbs: Math.round(estimate.tdee * 0.5 / 4),
+        fat: Math.round(estimate.tdee * 0.25 / 9)
+      };
+    }
+
+    function updateMacroGuide() {
+      const targets = macroTargets();
+      document.getElementById("macroCalorieSummary").textContent = targets
+        ? `Estimated BMR ${formatNumber(calorieEstimate().bmr)} kcal · maintenance ${formatNumber(targets.calories)} kcal/day`
+        : profile.age && profile.age < 18
+          ? "Adult calorie and macro estimates are not shown for people under 18."
+          : "Enter height, weight, age, metabolic equation, and activity level in Profile for estimates.";
+      document.getElementById("macroProtein").textContent = targets ? `${formatNumber(targets.protein)} g` : "—";
+      document.getElementById("macroCarbs").textContent = targets ? `${formatNumber(targets.carbs)} g` : "—";
+      document.getElementById("macroFat").textContent = targets ? `${formatNumber(targets.fat)} g` : "—";
+      ["protein", "carbs", "fat"].forEach(key => {
+        document.getElementById(`eaten${key[0].toUpperCase()}${key.slice(1)}`).textContent = `${formatNumber(dailyMacros[key])} g`;
+        const input = document.querySelector(`[data-macro="${key}"]`);
+        if (document.activeElement !== input) input.value = dailyMacros[key];
+      });
+    }
+
+    function updateHealthOverview() {
+      const targets = macroTargets();
+      const hasProfile =
+        profile.height && profile.weight && profile.age >= 18 && profile.equation;
+      const goalAverage = Math.round(
+        goalKeys.reduce((sum, key) => sum + percentFor(goals[key]), 0) /
+          goalKeys.length
+      );
+      const hasMacroRecord = Object.values(dailyMacros).some(value => value > 0);
+      const macroScore = targets && hasMacroRecord
+        ? Math.round(
+            ["protein", "carbs", "fat"].reduce(
+              (sum, key) =>
+                sum + Math.min(100, dailyMacros[key] / targets[key] * 100),
+              0
+            ) / 3
+          )
+        : null;
+      const score = macroScore === null
+        ? goalAverage
+        : Math.round((goalAverage + macroScore) / 2);
+      const bmi = profile.height && profile.weight
+        ? profile.weight / ((profile.height / 100) ** 2)
+        : 0;
+      const bmiSummary = !bmi
+        ? "BMI unavailable"
+        : profile.age < 20
+          ? `BMI ${bmi.toFixed(1)} (adult categories not applied)`
+          : `BMI ${bmi.toFixed(1)} (${bmi < 18.5 ? "below" : bmi < 25 ? "within" : bmi < 30 ? "above" : "outside"} adult reference range)`;
+      document.getElementById("healthOverviewScore").textContent = hasProfile ? `${score}%` : "—";
+      document.getElementById("healthOverviewText").textContent = hasProfile
+        ? `${bmiSummary} · estimated maintenance ${formatNumber(targets?.calories || 0)} kcal/day · tracked-goal${macroScore === null ? "" : " and macro"} progress today. Not a medical score.`
+        : profile.age && profile.age < 18
+          ? `${bmiSummary} · adult calorie and macro estimates are not provided for people under 18.`
+        : "Add height, weight, age, equation, and activity level to estimate a wellness snapshot.";
+    }
+
+    // Trend helpers: show simple, historical estimates only when dated measurements exist.
+    function estimateDateFromTrend(entries, current, target) {
+      const ordered = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+      if (ordered.length < 2 || !Number.isFinite(target) || target <= 0) return null;
+      const first = ordered[0];
+      const last = ordered[ordered.length - 1];
+      const elapsed =
+        (Date.parse(`${last.date}T00:00:00`) -
+          Date.parse(`${first.date}T00:00:00`)) /
+        86400000;
+      if (elapsed <= 0 || first.value === last.value) return null;
+      const perDay = (last.value - first.value) / elapsed;
+      const remainingDays = (target - current) / perDay;
+      if (!Number.isFinite(remainingDays) || remainingDays < 0 || remainingDays > 36500) return null;
+      const date = new Date(`${todayKey}T00:00:00`);
+      date.setDate(date.getDate() + Math.ceil(remainingDays));
+      return date;
+    }
+
+    function updateWeightEstimate() {
+      const chart = document.getElementById("weightChart");
+      chart.replaceChildren();
+      const sorted = [...weighIns].sort((a, b) => a.date.localeCompare(b.date));
+      if (sorted.length) {
+        const values = sorted.map(item => item.weight);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const spread = Math.max(max - min, 1);
+        const points = sorted.map((item, index) => ({
+          x: sorted.length === 1 ? 160 : 18 + index * 284 / (sorted.length - 1),
+          y: 102 - (item.weight - min) * 82 / spread
+        }));
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+        line.setAttribute("points", points.map(point => `${point.x},${point.y}`).join(" "));
+        line.setAttribute("fill", "none");
+        line.setAttribute("stroke", "#007b9e");
+        line.setAttribute("stroke-width", "3");
+        chart.append(line);
+        points.forEach(point => {
+          const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          circle.setAttribute("cx", point.x);
+          circle.setAttribute("cy", point.y);
+          circle.setAttribute("r", "4");
+          circle.setAttribute("fill", "#f15a24");
+          chart.append(circle);
+        });
+        const firstLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        firstLabel.setAttribute("x", sorted.length === 1 ? "160" : "18");
+        firstLabel.setAttribute("y", "117");
+        firstLabel.setAttribute("text-anchor", sorted.length === 1 ? "middle" : "start");
+        firstLabel.textContent = sorted[0].date.slice(5);
+        chart.append(firstLabel);
+        if (sorted.length > 1) {
+          const lastLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          lastLabel.setAttribute("x", "302");
+          lastLabel.setAttribute("y", "117");
+          lastLabel.setAttribute("text-anchor", "end");
+          lastLabel.textContent = sorted.at(-1).date.slice(5);
+          chart.append(lastLabel);
+        }
+      }
+      const target = weightGoal;
+      const latestWeight = sorted.at(-1)?.weight || profile.weight;
+      const trend = estimateDateFromTrend(
+        weighIns.map(item => ({ date: item.date, value: item.weight })),
+        latestWeight,
+        target
+      );
+      let text = weighIns.length < 2 ? "Add weigh-ins on different dates to estimate a trend toward your goal." : "Your recorded weights are not changing yet, so an arrival date cannot be estimated.";
+      if (!target) text = "Set a desired weight and log weigh-ins on different dates to see a trend-based estimate.";
+      else if (trend) text = `At the recent measured rate, the target could be reached around ${trend.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}. This is a simple trend projection, not a promise.`;
+      document.getElementById("weightEstimate").textContent = text;
+      if (document.activeElement !== document.getElementById("weightGoal")) document.getElementById("weightGoal").value = weightGoal || "";
+      const selectedWeight = sorted.find(item => item.date === selectedDate)?.weight;
+      if (document.activeElement !== document.getElementById("weightEntry")) document.getElementById("weightEntry").value = selectedWeight || "";
+    }
+
+    // Render saved meals and personal-goal progress for the currently selected day.
+    function renderMeals() {
+      const list = document.getElementById("mealList");
+      list.replaceChildren();
+      meals.forEach((meal, index) => {
+        const row = document.createElement("div");
+        row.className = "meal-item";
+        const details = document.createElement("span");
+        details.textContent = `${meal.name} · P ${meal.protein}g · C ${meal.carbs}g · F ${meal.fat}g`;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Remove";
+        remove.addEventListener("click", () => {
+          dailyMacros.protein = Math.max(0, dailyMacros.protein - meal.protein);
+          dailyMacros.carbs = Math.max(0, dailyMacros.carbs - meal.carbs);
+          dailyMacros.fat = Math.max(0, dailyMacros.fat - meal.fat);
+          meals.splice(index, 1);
+          renderMeals();
+          updateMacroGuide();
+          updateHealthOverview();
+          renderHistoryRecords();
+          saveState();
+        });
+        row.append(details, remove);
+        list.append(row);
+      });
+    }
+
+    function renderGeneralGoals() {
+      const list = document.getElementById("generalGoalList");
+      list.replaceChildren();
+      generalGoals.forEach(goal => {
+        const visibleHistory = [...goal.history].filter(point => point.date <= selectedDate).sort((a, b) => a.date.localeCompare(b.date));
+        const visibleValue = visibleHistory.length ? visibleHistory.at(-1).value : 0;
+        const item = document.createElement("div");
+        item.className = "general-goal-item";
+        const title = document.createElement("h3");
+        title.textContent = goal.name;
+        const info = document.createElement("p");
+        info.textContent = `${formatNumber(visibleValue)} of ${formatNumber(goal.target)} ${goal.unit}`;
+        const controls = document.createElement("div");
+        controls.className = "value-controls";
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "0";
+        input.value = visibleValue;
+        input.setAttribute("aria-label", `${goal.name} progress`);
+        input.addEventListener("change", () => {
+          const value = Number(input.value);
+          if (!Number.isFinite(value) || value < 0) {
+            input.value = visibleValue;
+            return;
+          }
+          const sameDate = goal.history.findIndex(point => point.date === selectedDate);
+          const point = { date: selectedDate, value };
+          if (sameDate >= 0) goal.history[sameDate] = point;
+          else goal.history.push(point);
+          goal.value = value;
+          updateGeneralGoals();
+        });
+        const details = document.createElement("p");
+        const eta = estimateDateFromTrend(visibleHistory, visibleValue, goal.target);
+        details.textContent = visibleValue >= goal.target
+          ? "Goal reached."
+          : eta ? `At your recorded rate, estimated target date: ${eta.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}` : "Record progress on different dates to estimate a goal date.";
+        const chart = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        chart.setAttribute("viewBox", "0 0 320 80");
+        chart.setAttribute("class", "trend-chart");
+        chart.setAttribute("role", "img");
+        chart.setAttribute("aria-label", `${goal.name} progress history`);
+        const history = visibleHistory;
+        if (history.length > 0) {
+          const max = Math.max(goal.target, ...history.map(point => point.value), 1);
+          const points = history.map((point, pointIndex) => {
+            const x = history.length === 1 ? 160 : 12 + pointIndex * 296 / (history.length - 1);
+            const y = 62 - point.value / max * 52;
+            return `${x},${y}`;
+          }).join(" ");
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+          line.setAttribute("points", points);
+          line.setAttribute("fill", "none");
+          line.setAttribute("stroke", "#55a66c");
+          line.setAttribute("stroke-width", "3");
+          chart.append(line);
+          history.forEach((point, pointIndex) => {
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", history.length === 1 ? 160 : 12 + pointIndex * 296 / (history.length - 1));
+            circle.setAttribute("cy", 62 - point.value / max * 52);
+            circle.setAttribute("r", "3");
+            circle.setAttribute("fill", "#f15a24");
+            chart.append(circle);
+          });
+        }
+        if (history.length) {
+          const firstLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          firstLabel.setAttribute("x", history.length === 1 ? "160" : "12");
+          firstLabel.setAttribute("y", "77");
+          firstLabel.setAttribute("text-anchor", history.length === 1 ? "middle" : "start");
+          firstLabel.textContent = history[0].date.slice(5);
+          chart.append(firstLabel);
+          if (history.length > 1) {
+            const lastLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            lastLabel.setAttribute("x", "308");
+            lastLabel.setAttribute("y", "77");
+            lastLabel.setAttribute("text-anchor", "end");
+            lastLabel.textContent = history.at(-1).date.slice(5);
+            chart.append(lastLabel);
+          }
+        }
+        controls.append(input);
+        item.append(title, info, controls, chart, details);
+        list.append(item);
+      });
+    }
+    function updateGeneralGoals() {
+      renderGeneralGoals();
+      saveState();
+    }
+    function updateGoalDetail() {
+      if (!currentDetailGoal) return;
+      const goal = goals[currentDetailGoal];
+      document.getElementById("goalDetailTitle").textContent = goal.label;
+      document.getElementById("goalDetailIntro").textContent = `Track ${goal.unit} and set a daily target that works for you.`;
+      document.getElementById("goalDetailProgress").textContent = `${formatNumber(goal.value)} of ${formatNumber(goal.target)} ${goal.unit}`;
+      document.getElementById("goalDetailPercent").textContent = `${percentFor(goal)}% today · ${formatNumber(goal.weekValue)} of ${formatNumber(goal.target * 7)} ${goal.unit} this week (${weeklyPercentFor(goal)}%)`;
+      document.getElementById("goalTargetLabel").textContent = `Daily target (${goal.unit})`;
+      document.getElementById("goalTarget").value = goal.target;
+      document.getElementById("detailAdd").setAttribute("aria-label", `Add ${goal.increment} ${goal.unit}`);
+      document.getElementById("goalDetailPoints").textContent = completedToday.has(currentDetailGoal) ? "Earned today" : "+25 pts";
+    }
+    function updateGoals() {
+      currentRecord();
+      recalculateWeeklyValues();
+      goalKeys.forEach(key => {
+        const goal = goals[key];
+        const percent = percentFor(goal);
+        const weeklyPercent = weeklyPercentFor(goal);
+        const value = formatNumber(goal.value);
+        const goalName = `${key[0].toUpperCase()}${key.slice(1)}`;
+        document.getElementById(`${key}Percent`).textContent = `${weeklyPercent}%`;
+        document.getElementById(`home${goalName}Percent`).textContent =
+          `${weeklyPercent}%`;
+        document.getElementById(`metrics${goalName}Detail`).textContent =
+          `${value} of ${formatNumber(goal.target)} ${goal.unit}`;
+        document.getElementById(`home${goalName}Bar`).style.width =
+          `${percent}%`;
+        document.getElementById(`home${goalName}MetricPercent`).textContent =
+          `${percent}%`;
+        document.getElementById(`home${goalName}MetricAmount`).textContent =
+          `${value} / ${formatNumber(goal.target)}${key === "water" ? " ml" : ""}`;
+        const manualInput = document.querySelector(`[data-manual="${key}"]`);
+        if (document.activeElement !== manualInput) manualInput.value = goal.value;
+      });
+      document.getElementById("pointsTotal").textContent = `${formatNumber(totalPoints)} pts`;
+      document.getElementById("goalsPoints").textContent = `${formatNumber(totalPoints)} pts`;
+      document.getElementById("homeGoalSummary").textContent =
+        `This week · ${goalKeys
+          .map(key =>
+            `${key[0].toUpperCase()}${key.slice(1)} ${weeklyPercentFor(goals[key])}%`
+          )
+          .join(" · ")}`;
+      drawGoalChart();
+      updateGoalDetail();
+      updateMacroGuide();
+      updateHealthOverview();
+      renderHistoryRecords();
+      saveState();
+    }
+    let currentDetailGoal = null;
+    function setProgress(key, value) {
+      const goal = goals[key];
+      const before = goal.value;
+      goal.value = Math.max(0, Math.min(1000000, value));
+      if (before < goal.target && goal.value >= goal.target && !completedToday.has(key)) {
+        completedToday.add(key);
+        totalPoints += 25;
+        showToast(`${goal.label} complete! +25 Trail points`);
+      }
+      updateGoals();
+    }
+    function addProgress(key) {
+      const goal = goals[key];
+      setProgress(key, Math.min(goal.target, goal.value + goal.increment));
+    }
+
+    // Date selection loads a saved record into the shared controls before updating every view.
+    function showRecordForDate(date) {
+      selectedDate = date;
+      if (!dailyHistory[date]) {
+        dailyHistory[date] = {
+          values: { steps: 0, calories: 0, water: 0 },
+          macros: { protein: 0, carbs: 0, fat: 0 },
+          meals: [],
+          todos: [false, false, false, false],
+          completed: []
+        };
+      }
+      const record = dailyHistory[date];
+      goalKeys.forEach(key => {
+        goals[key].value = validNumber(record.values?.[key], 0, 0, 1000000);
+      });
+      dailyMacros = {
+        protein: validNumber(record.macros?.protein, 0, 0, 10000),
+        carbs: validNumber(record.macros?.carbs, 0, 0, 10000),
+        fat: validNumber(record.macros?.fat, 0, 0, 10000)
+      };
+      meals = Array.isArray(record.meals) ? record.meals : [];
+      completedToday = new Set(Array.isArray(record.completed) ? record.completed : []);
+      const dateObject = new Date(`${date}T00:00:00`);
+      const dateLabel = dateObject.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+      document.getElementById("scheduleDayTitle").textContent =
+        date === todayKey ? "Today's schedule" : `${dateLabel} schedule`;
+      document.getElementById("metricsDayTitle").textContent =
+        date === todayKey ? "Today's activity" : `${dateLabel} activity`;
+      document.getElementById("historyDaySummary").textContent =
+        date === todayKey
+          ? "Showing today's schedule and records. You can edit earlier dates here."
+          : `Showing saved records for ${dateLabel}. Activity, meals, and to-dos are editable.`;
+      document.getElementById("historyDate").value = date;
+      document.getElementById("metricsDate").value = date;
+      document.getElementById("profileDate").value = date;
+      document
+        .querySelectorAll("#scheduleTodoList .todo-item input")
+        .forEach((input, index) => {
+          input.checked = Boolean(record.todos?.[index]);
+        });
+      updateTodoCount();
+      renderMeals();
+      renderGeneralGoals();
+      updateWeightEstimate();
+      renderHistoryRecords();
+      updateGoals();
+    }
+
+    function renderHistoryRecords() {
+      const content = document.getElementById("historyRecordDetails");
+      content.replaceChildren();
+      goalKeys.forEach(key => {
+        const line = document.createElement("p");
+        line.className = "health-note";
+        line.textContent = `${goals[key].label}: ${formatNumber(goals[key].value)} ${goals[key].unit}`;
+        content.append(line);
+      });
+      const mealHeading = document.createElement("p");
+      mealHeading.className = "health-note";
+      mealHeading.textContent = meals.length ? `Meals: ${meals.map(meal => meal.name).join(", ")}` : "No meals recorded.";
+      content.append(mealHeading);
+      const macroSummary = document.createElement("p");
+      macroSummary.className = "health-note";
+      macroSummary.textContent = `Macros: protein ${formatNumber(dailyMacros.protein)} g · carbs ${formatNumber(dailyMacros.carbs)} g · fat ${formatNumber(dailyMacros.fat)} g`;
+      content.append(macroSummary);
+      const weight = weighIns.find(item => item.date === selectedDate);
+      if (weight) {
+        const weightSummary = document.createElement("p");
+        weightSummary.className = "health-note";
+        weightSummary.textContent = `Weight logged: ${formatNumber(weight.weight)} kg`;
+        content.append(weightSummary);
+      }
+      const done = [...document.querySelectorAll("#scheduleTodoList .todo-item")].filter(item => item.querySelector("input").checked).map(item => item.querySelector("span").textContent);
+      const todos = document.createElement("p");
+      todos.className = "health-note";
+      todos.textContent = done.length ? `Achieved: ${done.join(", ")}` : "No to-do items marked complete.";
+      content.append(todos);
+    }
+
+    function openGoalDetail(key) {
+      if (!Object.hasOwn(goals, key)) return;
+      currentDetailGoal = key;
+      updateGoalDetail();
+      showPage("goalDetail");
+    }
+
+    // User interactions: goal adjustments, date pickers, meals, profile, and trend entries.
+    document.querySelectorAll("[data-goal]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.stopPropagation();
+        addProgress(button.dataset.goal);
+      });
+    });
+    ["homeGoalChart", "goalChart"].forEach(chartId => {
+      const chart = document.getElementById(chartId);
+      chart.addEventListener("click", event => {
+        const slice = event.target.closest("[data-goal]");
+        if (slice) openGoalDetail(slice.dataset.goal);
+      });
+      chart.addEventListener("keydown", event => {
+        const slice = event.target.closest("[data-goal]");
+        if (slice && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          openGoalDetail(slice.dataset.goal);
+        }
+      });
+    });
+    document.getElementById("detailAdd").addEventListener("click", () => {
+      if (currentDetailGoal) addProgress(currentDetailGoal);
+    });
+    document.getElementById("goalTarget").addEventListener("change", event => {
+      if (!currentDetailGoal) return;
+      const target = Number(event.currentTarget.value);
+      if (!Number.isFinite(target) || target < 1 || target > 1000000) {
+        event.currentTarget.value = goals[currentDetailGoal].target;
+        showToast("Enter a daily target greater than zero.");
+        return;
+      }
+      goals[currentDetailGoal].target = Math.round(target);
+      const goal = goals[currentDetailGoal];
+      goal.value = Math.min(goal.value, goal.target);
+      if (goal.value >= goal.target && !completedToday.has(currentDetailGoal)) {
+        completedToday.add(currentDetailGoal);
+        totalPoints += 25;
+        showToast(`${goal.label} complete! +25 Trail points`);
+      }
+      updateGoals();
+    });
+    document.querySelectorAll("[data-decrease]").forEach(button => {
+      button.addEventListener("click", () => {
+        const key = button.dataset.decrease;
+        setProgress(key, goals[key].value - goals[key].increment);
+      });
+    });
+    document.querySelectorAll("[data-manual]").forEach(input => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.manual;
+        const value = Number(input.value);
+        if (!Number.isFinite(value) || value < 0) {
+          input.value = goals[key].value;
+          showToast("Enter a valid non-negative amount.");
+          return;
+        }
+        setProgress(key, value);
+      });
+    });
+    document.getElementById("historyDate").max = todayKey;
+    document.getElementById("metricsDate").max = todayKey;
+    document.getElementById("profileDate").max = todayKey;
+    document.getElementById("historyDate").addEventListener("change", event => {
+      if (event.target.value && event.target.value <= todayKey) showRecordForDate(event.target.value);
+      else event.target.value = selectedDate;
+    });
+    document.getElementById("metricsDate").addEventListener("change", event => {
+      if (event.target.value && event.target.value <= todayKey) showRecordForDate(event.target.value);
+      else event.target.value = selectedDate;
+    });
+    document.getElementById("profileDate").addEventListener("change", event => {
+      if (event.target.value && event.target.value <= todayKey) showRecordForDate(event.target.value);
+      else event.target.value = selectedDate;
+    });
+    document.querySelectorAll("#scheduleTodoList .todo-item input").forEach(input => {
+      input.addEventListener("change", () => {
+        updateTodoCount();
+        renderHistoryRecords();
+        saveState();
+      });
+    });
+    document.querySelectorAll("[data-macro]").forEach(input => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.macro;
+        const value = Number(input.value);
+        if (!Number.isFinite(value) || value < 0) {
+          input.value = dailyMacros[key];
+          showToast("Enter a valid non-negative macro amount.");
+          return;
+        }
+        dailyMacros[key] = Math.min(value, 10000);
+        updateMacroGuide();
+        updateHealthOverview();
+        renderHistoryRecords();
+        saveState();
+      });
+    });
+    document.getElementById("mealForm").addEventListener("submit", event => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      const meal = {
+        name: String(data.get("name")).trim(),
+        protein: Number(data.get("protein")),
+        carbs: Number(data.get("carbs")),
+        fat: Number(data.get("fat"))
+      };
+      if (!meal.name || Object.values(meal).some(value => typeof value === "number" && (!Number.isFinite(value) || value < 0))) {
+        showToast("Enter a meal name and valid non-negative macro amounts.");
+        return;
+      }
+      meals.push(meal);
+      dailyMacros.protein += meal.protein;
+      dailyMacros.carbs += meal.carbs;
+      dailyMacros.fat += meal.fat;
+      event.currentTarget.reset();
+      renderMeals();
+      updateMacroGuide();
+      updateHealthOverview();
+      renderHistoryRecords();
+      saveState();
+      showToast("Meal added to this day's log.");
+    });
+    document.getElementById("profileForm").addEventListener("input", event => {
+      const field = event.target.name;
+      if (field === "equation") profile.equation = event.target.value;
+      else if (field === "activity") profile.activity = validNumber(Number(event.target.value), 1.2, 1.2, 1.9);
+      else {
+        const value = Number(event.target.value);
+        if (!Object.hasOwn(profile, field)) return;
+        profile[field] = event.target.validity.valid && Number.isFinite(value) && value > 0 ? value : 0;
+      }
+      updateProfileSummary();
+      saveState();
+    });
+    document.getElementById("profileForm").addEventListener("change", event => {
+      if (["equation", "activity"].includes(event.target.name)) {
+        profile[event.target.name] = event.target.name === "activity" ? Number(event.target.value) : event.target.value;
+        updateProfileSummary();
+        saveState();
+      }
+    });
+    document.getElementById("weightGoal").addEventListener("change", event => {
+      const value = Number(event.target.value);
+      if (event.target.value && (!Number.isFinite(value) || value < 1 || value > 500)) {
+        event.target.value = weightGoal || "";
+        showToast("Enter a weight goal between 1 and 500 kg.");
+        return;
+      }
+      weightGoal = value || 0;
+      updateWeightEstimate();
+      saveState();
+    });
+    document.getElementById("logWeight").addEventListener("click", () => {
+      const weight = Number(document.getElementById("weightEntry").value);
+      if (!Number.isFinite(weight) || weight < 1 || weight > 500) {
+        showToast("Enter a weight between 1 and 500 kg.");
+        return;
+      }
+      const existing = weighIns.findIndex(item => item.date === selectedDate);
+      const entry = { date: selectedDate, weight };
+      if (existing >= 0) weighIns[existing] = entry;
+      else weighIns.push(entry);
+      if (selectedDate === todayKey) profile.weight = weight;
+      updateProfileSummary();
+      renderHistoryRecords();
+      saveState();
+      showToast(`Weight saved for ${selectedDate}.`);
+    });
+
+    document.getElementById("generalGoalForm").addEventListener("submit", event => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      const target = Number(data.get("target"));
+      const name = String(data.get("name")).trim();
+      const unit = String(data.get("unit")).trim();
+      if (!name || !unit || !Number.isFinite(target) || target <= 0) {
+        showToast("Enter a goal name, positive target, and unit.");
+        return;
+      }
+      generalGoals.push({ id: `${Date.now()}-${Math.random()}`, name, unit, target, value: 0, history: [] });
+      event.currentTarget.reset();
+      renderGeneralGoals();
+      saveState();
+    });
+    document.getElementById("resetGoals").addEventListener("click", () => {
+      goalKeys.forEach(key => {
+        goals[key].value = 0;
+      });
+      updateGoals();
+      renderHistoryRecords();
+      showToast("Today's progress has been reset. Points already earned stay yours.");
+    });
+
+    // Navigation and small shared UI helpers.
+    function showPage(page) {
+      const pageId = `${page}Page`;
+      document.querySelectorAll(".page").forEach(item => item.classList.toggle("active", item.id === pageId));
+      const activeNav = page === "goalDetail" ? null : page;
+      document.querySelectorAll(".nav-button").forEach(item => {
+        const active = item.dataset.page === activeNav;
+        item.classList.toggle("active", active);
+        if (active) item.setAttribute("aria-current", "page");
+        else item.removeAttribute("aria-current");
+      });
+      document.querySelector(".page-content").scrollTop = 0;
+    }
+    document.querySelectorAll("[data-page]").forEach(button => {
+      button.addEventListener("click", () => showPage(button.dataset.page));
+    });
+    function updateTodoCount() {
+      const items = [...document.querySelectorAll(".todo-item")];
+      const done = items.filter(item => item.querySelector("input").checked).length;
+      items.forEach(item => item.classList.toggle("done", item.querySelector("input").checked));
+      document.getElementById("todoCount").textContent = `${done} of ${items.length} done`;
+    }
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+    }
+
+    // Initial render: populate dates, profile inputs, summaries, and the current day's record.
+    let toastTimer;
+    document.getElementById("clock").textContent = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    document.getElementById("headerDate").textContent = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    document.getElementById("greeting").textContent = `YOUR ${now.toLocaleDateString([], { weekday: "long" }).toUpperCase()}, YOUR PACE`;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (now.getDay() + 6) % 7);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const rangeOptions = { month: "short", day: "numeric" };
+    const weekRange = `${monday.toLocaleDateString([], rangeOptions)}–${sunday.toLocaleDateString([], rangeOptions)}`;
+    document.getElementById("weekRange").textContent = weekRange;
+    document.getElementById("homeWeekRange").textContent = `${weekRange} · weekly goals`;
+    document.getElementById("goalPageWeekRange").textContent = `${weekRange} · each daily goal × 7`;
+    document.querySelector(".week-strip").setAttribute("aria-label", `Week of ${monday.toLocaleDateString([], rangeOptions)}`);
+    document.querySelectorAll(".week-day").forEach((day, index) => {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + index);
+      day.querySelector("strong").textContent = date.getDate();
+      day.classList.toggle("selected", date.toDateString() === now.toDateString());
+    });
+    document.getElementById("scheduleDayTitle").textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+    document.getElementById("homeScheduleDate").textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+    document.getElementById("homeScheduleSummary").textContent = `${now.toLocaleDateString([], { weekday: "long" })} · 2 classes, 1 walk, 1 workout`;
+    document.querySelectorAll("#profileForm [name]").forEach(input => {
+      if (input.name === "equation") input.value = profile.equation;
+      else if (input.name === "activity") input.value = String(profile.activity);
+      else input.value = profile[input.name] || "";
+    });
+    updateProfileSummary();
+    renderMeals();
+    renderGeneralGoals();
+    document.getElementById("historyDate").value = todayKey;
+    document.getElementById("metricsDate").value = todayKey;
+    document.getElementById("profileDate").value = todayKey;
+    showRecordForDate(todayKey);
+  </script>
+</body>
+</html>
