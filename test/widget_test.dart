@@ -8,6 +8,9 @@ void main() {
   testWidgets('User can navigate from Home to Profile', (tester) async {
     await tester.pumpWidget(const TrailblazerApp());
 
+    await tester.tap(find.text('Continue as guest'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Trailblazer · Home'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Open navigation menu'));

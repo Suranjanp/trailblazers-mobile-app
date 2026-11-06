@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'screens/auth_screen.dart';
 import 'screens/main_screen.dart';
 
 void main() {
@@ -19,7 +20,11 @@ class TrailblazerApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFFF7F8FA),
         useMaterial3: true,
       ),
-      home: const MainScreen(),
+      home: const AuthScreen(),
+      routes: {
+        '/signup': (_) => const AuthScreen(signUp: true),
+        '/home': (_) => const MainScreen(),
+      },
     );
   }
 }
