@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, this.signUp = false});
@@ -11,26 +12,60 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
   final _password = TextEditingController();
   bool _hidePassword = true;
+  bool _submitting = false; //for second submission if firebase doesn't respond
 
   @override
   void dispose() {
+    _email.dispose();
     _password.dispose();
     super.dispose();
   }
 
-  void _submit() {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _submit() async {
+    if (_submitting || !_formKey.currentState!.validate()) {
+      return;
+    }
 
+    final email = _email.text.trim();
+    final password = _password.text;
     FocusScope.of(context).unfocus();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Account access is unavailable. You can continue as a guest.',
-        ),
-      ),
-    );
+    setState(() => _submitting = true);
+
+    try {
+      final auth = FirebaseAuth.instance;
+
+      if (widget.signUp) {
+        await auth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      } else {
+        await auth.signInWithEmailAndPassword(email: email, password: password);
+      }
+
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) return;
+
+      final message = switch (error.code) {
+        'email-already-in-use' => 'An account already uses this email.',
+        'invalid-credential' ||
+        'wrong-password' ||
+        'user-not-found' => 'Check your email and password.',
+        'weak-password' => 'Choose a stronger password.',
+        'network-request-failed' => 'Check your connection and try again.',
+        _ => 'Could not complete the request. Please try again.',
+      };
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -71,6 +106,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       const SizedBox(height: 16),
                     ],
                     TextFormField(
+                      controller: _email,
                       decoration: const InputDecoration(
                         labelText: 'Email',
                         border: OutlineInputBorder(),
@@ -141,7 +177,10 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                     ],
                     const SizedBox(height: 24),
-                    FilledButton(onPressed: _submit, child: Text(title)),
+                    FilledButton(
+                      onPressed: _submitting ? null : _submit,
+                      child: Text(_submitting ? 'Please wait…' : title),
+                    ),
                     TextButton(
                       onPressed: signUp
                           ? () => Navigator.pop(context)

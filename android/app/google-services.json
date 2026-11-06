@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "292778398931",
+    "project_id": "trailblazer-d154c",
+    "storage_bucket": "trailblazer-d154c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:292778398931:android:214b63f886735be6847026",
+        "android_client_info": {
+          "package_name": "com.example.test_ap_1"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBspbCdzvc_MFmTl7rZwS1Sl9WvXFqTdrQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
