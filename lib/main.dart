@@ -26,6 +26,7 @@ class TrailblazerApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFF15A24)),
         scaffoldBackgroundColor: const Color(0xFFF7F8FA),
         useMaterial3: true,
+        fontFamily: 'Roboto',
       ),
       home: const AuthScreen(),
       routes: {

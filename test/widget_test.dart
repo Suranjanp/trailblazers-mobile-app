@@ -8,7 +8,9 @@ void main() {
   testWidgets('User can navigate from Home to Profile', (tester) async {
     await tester.pumpWidget(const TrailblazerApp());
 
-    await tester.tap(find.text('Continue as guest'));
+    final continueAsGuest = find.text('Continue as Guest');
+    await tester.ensureVisible(continueAsGuest);
+    await tester.tap(continueAsGuest);
     await tester.pumpAndSettle();
 
     expect(find.text('Trailblazer · Home'), findsOneWidget);
