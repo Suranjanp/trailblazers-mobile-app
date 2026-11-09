@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'home_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -66,31 +67,33 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
       body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _icons[_selectedIndex],
-                  size: 64,
-                  color: Theme.of(context).colorScheme.primary,
+        child: _selectedIndex == 0
+            ? const HomeScreen()
+            : Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _icons[_selectedIndex],
+                        size: 64,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _titles[_selectedIndex],
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _descriptions[_selectedIndex],
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  _titles[_selectedIndex],
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _descriptions[_selectedIndex],
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
+              ),
       ),
     );
   }
