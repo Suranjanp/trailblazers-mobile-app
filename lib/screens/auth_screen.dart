@@ -1,6 +1,7 @@
-
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+import 'profile_setup_screen.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/decorative_background.dart';
@@ -41,11 +42,46 @@ class _AuthScreenState extends State<AuthScreen> {
     super.dispose();
   }
 
+  void _goHome() {
+    Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+  }
+
+  Future<void> _continueAsGuest() async {
+    if (_submitting) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    setState(() => _submitting = true);
+
+    try {
+      final auth = FirebaseAuth.instance;
+      if (auth.currentUser?.isAnonymous != true) {
+        await auth.signInAnonymously();
+      }
+
+      if (mounted) {
+        _goHome();
+      }
+    } on FirebaseAuthException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Guest sign-in failed (${error.code}).')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
   Future<void> _submit() async {
     if (_submitting || !_formKey.currentState!.validate()) {
       return;
     }
 
+    final name = _name.text.trim();
     final email = _email.text.trim();
     final password = _password.text;
 
@@ -61,8 +97,22 @@ class _AuthScreenState extends State<AuthScreen> {
           password: password,
         );
 
-        // Save the user's name to their Firebase profile.
-        await credential.user?.updateDisplayName(_name.text.trim());
+        // Open profile setup for the new account.
+        final user = credential.user;
+        if (!mounted || user == null) {
+          return;
+        }
+
+        Navigator.of(context).pushAndRemoveUntil<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => ProfileSetupScreen(
+              userId: user.uid,
+              initialName: name,
+            ),
+          ),
+          (_) => false,
+        );
+        return;
       } else {
         await auth.signInWithEmailAndPassword(
           email: email,
@@ -78,7 +128,9 @@ class _AuthScreenState extends State<AuthScreen> {
         (_) => false,
       );
     } on FirebaseAuthException catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       final message = switch (error.code) {
         'email-already-in-use' =>
