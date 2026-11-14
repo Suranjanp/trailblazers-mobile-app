@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+
 import 'firebase_options.dart';
 import 'screens/auth_screen.dart';
 import 'screens/main_screen.dart';
@@ -23,7 +24,9 @@ class TrailblazerApp extends StatelessWidget {
       title: 'Trailblazer',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFF15A24)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFF15A24),
+        ),
         scaffoldBackgroundColor: const Color(0xFFF7F8FA),
         useMaterial3: true,
         fontFamily: 'Roboto',

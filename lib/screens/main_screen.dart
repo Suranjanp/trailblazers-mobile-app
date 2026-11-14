@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
+
+import 'account_profile_screen.dart';
 import 'home_screen.dart';
+import 'nutrition_screen.dart';
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  const MainScreen({
+    super.key,
+    this.profileScreen = const AccountProfileScreen(),
+  });
+
+  final Widget profileScreen;
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -67,33 +75,36 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
       body: SafeArea(
-        child: _selectedIndex == 0
-            ? const HomeScreen()
-            : Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _icons[_selectedIndex],
-                        size: 64,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _titles[_selectedIndex],
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _descriptions[_selectedIndex],
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+        child: switch (_selectedIndex) {
+          0 => const HomeScreen(),
+          2 => const NutritionScreen(),
+          5 => widget.profileScreen,
+          _ => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _icons[_selectedIndex],
+                    size: 64,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _titles[_selectedIndex],
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _descriptions[_selectedIndex],
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
+            ),
+          ),
+        },
       ),
     );
   }
