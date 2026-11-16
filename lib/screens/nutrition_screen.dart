@@ -7,8 +7,6 @@ const _mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 class NutritionScreen extends StatelessWidget {
   const NutritionScreen({super.key});
 
-  static const int _dailyCalorieTarget = 2000;
-
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -16,10 +14,11 @@ class NutritionScreen extends StatelessWidget {
       return const Center(child: Text('Sign in to track your meals.'));
     }
 
-    final foodLogs = FirebaseFirestore.instance
+    final profile = FirebaseFirestore.instance
         .collection('users')
-        .doc(user.uid)
-        .collection('foodLogs');
+        .doc(user.uid);
+    final foodLogs = profile.collection('foodLogs');
+    final profileStream = profile.snapshots();
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -57,44 +56,13 @@ class NutritionScreen extends StatelessWidget {
           totalCalories += _entryCalories(food);
         }
 
-        final consumedCalories = totalCalories.round();
-        final remainingCalories = _dailyCalorieTarget - consumedCalories;
-        final progress = (consumedCalories / _dailyCalorieTarget)
-            .clamp(0.0, 1.0)
-            .toDouble();
-
-        final calorieStatus = switch (remainingCalories) {
-          > 0 => '$remainingCalories kcal remaining',
-          0 => 'Target met',
-          _ => '${remainingCalories.abs()} kcal over target',
-        };
-
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('Calories today', style: textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    Text(
-                      '$consumedCalories / $_dailyCalorieTarget kcal',
-                      style: textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 12),
-                    LinearProgressIndicator(
-                      value: progress,
-                      semanticsLabel: 'Daily calorie target progress',
-                      semanticsValue: calorieStatus,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(calorieStatus),
-                  ],
-                ),
-              ),
+            _CalorieSummary(
+              profileStream: profileStream,
+              consumedCalories: totalCalories.round(),
+              isGuest: user.isAnonymous,
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
@@ -134,6 +102,80 @@ class NutritionScreen extends StatelessWidget {
     final servings = food['servings'] as num? ?? 0;
     final caloriesPerServing = food['caloriesPerServing'] as num? ?? 0;
     return servings.toDouble() * caloriesPerServing.toDouble();
+  }
+}
+
+class _CalorieSummary extends StatelessWidget {
+  const _CalorieSummary({
+    required this.profileStream,
+    required this.consumedCalories,
+    required this.isGuest,
+  });
+
+  final Stream<DocumentSnapshot<Map<String, dynamic>>> profileStream;
+  final int consumedCalories;
+  final bool isGuest;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: isGuest ? null : profileStream,
+      builder: (context, snapshot) {
+        final saved = snapshot.data?.data()?['calorieTarget'];
+        final target = saved is int && saved > 0 ? saved : null;
+
+        final String status;
+        if (isGuest) {
+          status = 'Sign in with an account to set a daily calorie target.';
+        } else if (snapshot.hasError) {
+          status = 'Could not load your calorie target.';
+        } else if (target != null) {
+          final remaining = target - consumedCalories;
+          status = switch (remaining) {
+            > 0 => '$remaining kcal remaining',
+            0 => 'Target met',
+            _ => '${remaining.abs()} kcal over target',
+          };
+        } else if (snapshot.connectionState == ConnectionState.waiting) {
+          status = 'Loading calorie target…';
+        } else {
+          status = 'Set a daily calorie target in Profile.';
+        }
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Calories today', style: textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(
+                  target == null
+                      ? '$consumedCalories kcal'
+                      : '$consumedCalories / $target kcal',
+                  style: textTheme.headlineSmall,
+                ),
+                if (target != null) ...[
+                  const SizedBox(height: 12),
+                  LinearProgressIndicator(
+                    value: (consumedCalories / target)
+                        .clamp(0.0, 1.0)
+                        .toDouble(),
+                    semanticsLabel: 'Daily calorie target progress',
+                    semanticsValue: status,
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(status),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
