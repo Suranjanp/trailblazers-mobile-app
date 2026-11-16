@@ -5,6 +5,7 @@ import 'package:test_ap_1/theme/app_colors.dart';
 
 import 'home_screen.dart';
 import 'schedule_screen.dart';
+import 'health_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -133,11 +134,11 @@ class _MainScreenState extends State<MainScreen> {
               // Functional Schedule screen
               : _selectedIndex == 1
                   ? const ScheduleScreen()
-
-                  // Remaining placeholder screens
-                  : Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
+                  : _selectedIndex == 3
+                      ? const HealthScreen()
+                      : Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
