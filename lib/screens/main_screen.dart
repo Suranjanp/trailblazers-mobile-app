@@ -1,14 +1,20 @@
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:test_ap_1/theme/app_colors.dart';
 
-import 'home_screen.dart';
-import 'schedule_screen.dart';
+import 'account_profile_screen.dart';
 import 'health_screen.dart';
+import 'home_screen.dart';
+import 'nutrition_screen.dart';
+import 'schedule_screen.dart';
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  const MainScreen({
+    super.key,
+    this.profileScreen = const AccountProfileScreen(),
+  });
+
+  final Widget profileScreen;
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -17,11 +23,8 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
-  static const Color primaryNavy = Color(0xFF073B5B);
-  static const Color backgroundGray = Color(0xFFF4F7F9);
-
   static const _titles = [
-    'Dashboard',
+    'Home',
     'Schedule',
     'Nutrition',
     'Health',
@@ -38,14 +41,9 @@ class _MainScreenState extends State<MainScreen> {
     Icons.person_outline,
   ];
 
-  static const _descriptions = [
-    'Your schedule and wellness progress will appear here.',
-    'Manage your classes and weekly schedule.',
-    'Record meals, calories, and protein.',
-    'Track your water intake and sleep.',
-    'Record workouts, steps, and fitness goals.',
-    'Manage your personal information and daily targets.',
-  ];
+  void _selectDestination(int index) {
+    setState(() => _selectedIndex = index);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,29 +51,20 @@ class _MainScreenState extends State<MainScreen> {
 
     return Theme(
       data: Theme.of(context).copyWith(
-        scaffoldBackgroundColor: backgroundGray,
-
-        // Navigation bar icon colors
         navigationBarTheme: NavigationBarThemeData(
           iconTheme: WidgetStateProperty.resolveWith<IconThemeData>(
-            (states) {
-              if (states.contains(WidgetState.selected)) {
-                return const IconThemeData(
-                  color: AppColors.trailblazerOrange,
-                );
-              }
-
-              return const IconThemeData(
-                color: Colors.white,
-              );
-            },
+            (states) => states.contains(WidgetState.selected)
+                ? const IconThemeData(color: AppColors.trailblazerOrange)
+                : const IconThemeData(color: Colors.white),
+          ),
+          labelTextStyle: const WidgetStatePropertyAll(
+            TextStyle(color: Colors.white),
           ),
         ),
       ),
-
       child: Scaffold(
         appBar: AppBar(
-          backgroundColor: primaryNavy,
+          backgroundColor: AppColors.navigationNavy,
           foregroundColor: Colors.white,
           title: Text(
             'Trailblazer · ${_titles[_selectedIndex]}',
@@ -87,37 +76,26 @@ class _MainScreenState extends State<MainScreen> {
               child: Center(
                 child: Text(
                   currentDate,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
               ),
             ),
           ],
         ),
-
         drawer: NavigationDrawer(
           selectedIndex: _selectedIndex,
           onDestinationSelected: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-
-            Navigator.pop(context);
+            _selectDestination(index);
+            Navigator.of(context).pop();
           },
           children: [
             const Padding(
               padding: EdgeInsets.all(24),
               child: Text(
                 'Trailblazer',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
             ),
-
             for (var index = 0; index < _titles.length; index++)
               NavigationDrawerDestination(
                 icon: Icon(_icons[index]),
@@ -125,58 +103,45 @@ class _MainScreenState extends State<MainScreen> {
               ),
           ],
         ),
-
-        // Screen content
         body: SafeArea(
-          child: _selectedIndex == 0
-              ? const HomeScreen()
-
-              // Functional Schedule screen
-              : _selectedIndex == 1
-                  ? const ScheduleScreen()
-                  : _selectedIndex == 3
-                      ? const HealthScreen()
-                      : Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _icons[_selectedIndex],
-                              size: 64,
-                              color: primaryNavy,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _titles[_selectedIndex],
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .headlineMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _descriptions[_selectedIndex],
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
+          child: switch (_selectedIndex) {
+            0 => const HomeScreen(),
+            1 => const ScheduleScreen(),
+            2 => const NutritionScreen(),
+            3 => const HealthScreen(),
+            5 => widget.profileScreen,
+            _ => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.fitness_center,
+                      size: 64,
+                      color: AppColors.navigationNavy,
                     ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Fitness',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Record workouts, steps, and fitness goals.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          },
         ),
-
-        // Bottom navigation
         bottomNavigationBar: NavigationBar(
           selectedIndex: _selectedIndex,
           backgroundColor: AppColors.navigationNavy,
           indicatorColor: AppColors.actionBlue,
-
-          onDestinationSelected: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-
+          onDestinationSelected: _selectDestination,
           destinations: [
             for (var index = 0; index < _titles.length; index++)
               NavigationDestination(

@@ -478,15 +478,15 @@ _buildTrackerCard(
     );
   }
 
-  // Water buttons
-  Widget _waterButton(int amount) {
-    return OutlinedButton(
-      onPressed: () => _addWater(amount),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.blue,
-        side: const BorderSide(color: Colors.blue),
-      ),
-      child: Text('+$amount ml'),
-    );
-  }
+  // // Water buttons
+  // Widget _waterButton(int amount) {
+  //   return OutlinedButton(
+  //     onPressed: () => _addWater(amount),
+  //     style: OutlinedButton.styleFrom(
+  //       foregroundColor: Colors.blue,
+  //       side: const BorderSide(color: Colors.blue),
+  //     ),
+  //     child: Text('+$amount ml'),
+  //   );
+  // }
 }

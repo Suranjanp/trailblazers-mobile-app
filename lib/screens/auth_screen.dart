@@ -1,6 +1,7 @@
-
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+import 'profile_setup_screen.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/decorative_background.dart';
@@ -41,11 +42,46 @@ class _AuthScreenState extends State<AuthScreen> {
     super.dispose();
   }
 
+  void _goHome() {
+    Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+  }
+
+  Future<void> _continueAsGuest() async {
+    if (_submitting) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    setState(() => _submitting = true);
+
+    try {
+      final auth = FirebaseAuth.instance;
+      if (auth.currentUser?.isAnonymous != true) {
+        await auth.signInAnonymously();
+      }
+
+      if (mounted) {
+        _goHome();
+      }
+    } on FirebaseAuthException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Guest sign-in failed (${error.code}).')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
   Future<void> _submit() async {
     if (_submitting || !_formKey.currentState!.validate()) {
       return;
     }
 
+    final name = _name.text.trim();
     final email = _email.text.trim();
     final password = _password.text;
 
@@ -61,51 +97,50 @@ class _AuthScreenState extends State<AuthScreen> {
           password: password,
         );
 
-        // Save the user's name to their Firebase profile.
-        await credential.user?.updateDisplayName(_name.text.trim());
-      } else {
-        await auth.signInWithEmailAndPassword(
-          email: email,
-          password: password,
+        // Open profile setup for the new account.
+        final user = credential.user;
+        if (!mounted || user == null) {
+          return;
+        }
+
+        Navigator.of(context).pushAndRemoveUntil<void>(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                ProfileSetupScreen(userId: user.uid, initialName: name),
+          ),
+          (_) => false,
         );
+        return;
+      } else {
+        await auth.signInWithEmailAndPassword(email: email, password: password);
       }
 
       if (!mounted) return;
 
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/home',
-        (_) => false,
-      );
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
     } on FirebaseAuthException catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       final message = switch (error.code) {
-        'email-already-in-use' =>
-          'An account already uses this email.',
+        'email-already-in-use' => 'An account already uses this email.',
         'invalid-credential' ||
         'wrong-password' ||
-        'user-not-found' =>
-          'Check your email and password.',
-        'weak-password' =>
-          'Choose a stronger password.',
-        'network-request-failed' =>
-          'Check your connection and try again.',
-        _ =>
-          'Could not complete the request. Please try again.',
+        'user-not-found' => 'Check your email and password.',
+        'weak-password' => 'Choose a stronger password.',
+        'network-request-failed' => 'Check your connection and try again.',
+        _ => 'Could not complete the request. Please try again.',
       };
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } catch (error) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Something went wrong. Please try again.',
-          ),
+          content: Text('Something went wrong. Please try again.'),
         ),
       );
     } finally {
@@ -121,25 +156,19 @@ class _AuthScreenState extends State<AuthScreen> {
     if (email.isEmpty ||
         !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter your email address first.'),
-        ),
+        const SnackBar(content: Text('Enter your email address first.')),
       );
       return;
     }
 
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: email,
-      );
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Password reset email sent. Check your inbox.',
-          ),
+          content: Text('Password reset email sent. Check your inbox.'),
         ),
       );
     } on FirebaseAuthException catch (error) {
@@ -178,16 +207,12 @@ class _AuthScreenState extends State<AuthScreen> {
     final taglineSize = smallScreen ? 15.0 : 17.0;
     final headingSize = smallScreen ? 20.0 : 22.0;
     final bodySize = smallScreen ? 12.0 : 14.0;
-    final buttonSize = smallScreen ? 15.0 : 16.0;
-    final tabSize = smallScreen ? 14.0 : 15.0;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          const Positioned.fill(
-            child: DecorativeBackground(),
-          ),
+          const Positioned.fill(child: DecorativeBackground()),
 
           SafeArea(
             child: Center(
@@ -197,9 +222,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   vertical: 10,
                 ),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: 440,
-                  ),
+                  constraints: const BoxConstraints(maxWidth: 440),
                   child: Form(
                     key: _formKey,
                     child: Column(
@@ -239,9 +262,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         Container(
                           height: 45,
                           decoration: BoxDecoration(
-                            border: Border.all(
-                              color: AppColors.actionBlue,
-                            ),
+                            border: Border.all(color: AppColors.actionBlue),
                             borderRadius: BorderRadius.circular(35),
                           ),
                           child: Row(
@@ -270,8 +291,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         if (signUp) ...[
                           TextFormField(
                             controller: _name,
-                            textCapitalization:
-                                TextCapitalization.words,
+                            textCapitalization: TextCapitalization.words,
                             textInputAction: TextInputAction.next,
                             decoration: _inputDecoration(
                               'Name',
@@ -301,9 +321,8 @@ class _AuthScreenState extends State<AuthScreen> {
                           validator: (value) {
                             final email = (value ?? '').trim();
 
-                            return RegExp(
-                              r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
-                            ).hasMatch(email)
+                            return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+                                    .hasMatch(email)
                                 ? null
                                 : 'Enter a valid email address.';
                           },
@@ -320,29 +339,29 @@ class _AuthScreenState extends State<AuthScreen> {
                           textInputAction: signUp
                               ? TextInputAction.next
                               : TextInputAction.done,
-                          onFieldSubmitted:
-                              signUp ? null : (_) => _submit(),
-                          decoration: _inputDecoration(
-                            'Password',
-                            Icons.lock_outline,
-                          ).copyWith(
-                            suffixIcon: IconButton(
-                              tooltip: _hidePassword
-                                  ? 'Show password'
-                                  : 'Hide password',
-                              onPressed: () {
-                                setState(() {
-                                  _hidePassword = !_hidePassword;
-                                });
-                              },
-                              icon: Icon(
-                                _hidePassword
-                                    ? Icons.visibility_off_outlined
-                                    : Icons.visibility_outlined,
-                                color: AppColors.textBlue,
+                          onFieldSubmitted: signUp ? null : (_) => _submit(),
+                          decoration:
+                              _inputDecoration(
+                                'Password',
+                                Icons.lock_outline,
+                              ).copyWith(
+                                suffixIcon: IconButton(
+                                  tooltip: _hidePassword
+                                      ? 'Show password'
+                                      : 'Hide password',
+                                  onPressed: () {
+                                    setState(() {
+                                      _hidePassword = !_hidePassword;
+                                    });
+                                  },
+                                  icon: Icon(
+                                    _hidePassword
+                                        ? Icons.visibility_off_outlined
+                                        : Icons.visibility_outlined,
+                                    color: AppColors.textBlue,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Enter your password.';
@@ -440,8 +459,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                     ),
                                   )
                                 : Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.center,
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
                                         title,
@@ -463,14 +481,10 @@ class _AuthScreenState extends State<AuthScreen> {
                         Row(
                           children: [
                             const Expanded(
-                              child: Divider(
-                                color: AppColors.actionBlue,
-                              ),
+                              child: Divider(color: AppColors.actionBlue),
                             ),
                             const Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 14,
-                              ),
+                              padding: EdgeInsets.symmetric(horizontal: 14),
                               child: Text(
                                 'or',
                                 style: TextStyle(
@@ -480,9 +494,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               ),
                             ),
                             const Expanded(
-                              child: Divider(
-                                color: AppColors.actionBlue,
-                              ),
+                              child: Divider(color: AppColors.actionBlue),
                             ),
                           ],
                         ),
@@ -519,19 +531,12 @@ class _AuthScreenState extends State<AuthScreen> {
                         const SizedBox(height: 12),
 
                         // Guest login
+                        // Guest login
                         TextButton(
-                          onPressed: () {
-                            Navigator.pushNamedAndRemoveUntil(
-                              context,
-                              '/home',
-                              (_) => false,
-                            );
-                          },
+                          onPressed: _submitting ? null : _continueAsGuest,
                           child: const Text(
                             'Continue as Guest',
-                            style: TextStyle(
-                              color: AppColors.textBlue,
-                            ),
+                            style: TextStyle(color: AppColors.textBlue),
                           ),
                         ),
                       ],
@@ -556,9 +561,7 @@ class _AuthScreenState extends State<AuthScreen> {
         child: Container(
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selected
-                ? AppColors.navigationNavy
-                : Colors.transparent,
+            color: selected ? AppColors.navigationNavy : Colors.transparent,
             borderRadius: BorderRadius.circular(35),
           ),
           child: Text(
@@ -575,29 +578,15 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   // Shared input styling
-  InputDecoration _inputDecoration(
-    String hint,
-    IconData icon,
-  ) {
+  InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(
-        color: AppColors.textBlue,
-        fontSize: 15,
-      ),
-      prefixIcon: Icon(
-        icon,
-        color: AppColors.textBlue,
-      ),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 15,
-      ),
+      hintStyle: const TextStyle(color: AppColors.textBlue, fontSize: 15),
+      prefixIcon: Icon(icon, color: AppColors.textBlue),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: const BorderSide(
-          color: AppColors.actionBlue,
-        ),
+        borderSide: const BorderSide(color: AppColors.actionBlue),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
@@ -608,16 +597,11 @@ class _AuthScreenState extends State<AuthScreen> {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: const BorderSide(
-          color: Colors.red,
-        ),
+        borderSide: const BorderSide(color: Colors.red),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: const BorderSide(
-          color: Colors.red,
-          width: 1.5,
-        ),
+        borderSide: const BorderSide(color: Colors.red, width: 1.5),
       ),
     );
   }

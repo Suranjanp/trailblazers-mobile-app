@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "D:/University of Texas at Tyler/Fall2026/Capstone/Trailblazer_Flutter_Starter/trailblazer/trailblazers-mobile-app/windows"
+    "cmake.sourceDirectory": "D:/University of Texas at Tyler/Fall2026/Capstone/Trailblazer_Flutter_Starter/trailblazer/trailblazers-mobile-app/windows",
+    "java.compile.nullAnalysis.mode": "automatic"
 }
