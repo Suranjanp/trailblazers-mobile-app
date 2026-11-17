@@ -1242,45 +1242,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  Widget _buildEmptyState({required bool noEntriesAtAll}) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.calendar_month_outlined,
-              size: 58,
-              color: AppColors.navigationNavy.withValues(alpha: 0.75),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              noEntriesAtAll
-                  ? 'No classes scheduled yet'
-                  : 'Nothing planned for $_selectedDay',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              noEntriesAtAll
-                  ? 'Add your classes and activities to organize your week.'
-                  : 'Enjoy the free time, or add an activity for this day.',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final dayEntries = _entriesForSelectedDay();
-    final todos = _todosForSelectedDay();
+    _todosForSelectedDay();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7F9),

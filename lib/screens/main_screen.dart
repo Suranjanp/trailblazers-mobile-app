@@ -7,6 +7,7 @@ import 'health_screen.dart';
 import 'home_screen.dart';
 import 'nutrition_screen.dart';
 import 'schedule_screen.dart';
+import 'fitness_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({
@@ -109,6 +110,7 @@ class _MainScreenState extends State<MainScreen> {
             1 => const ScheduleScreen(),
             2 => const NutritionScreen(),
             3 => const HealthScreen(),
+            4 => const FitnessScreen(),
             5 => widget.profileScreen,
             _ => Center(
               child: Padding(
