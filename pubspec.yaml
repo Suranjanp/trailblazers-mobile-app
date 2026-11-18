@@ -50,6 +50,29 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_native_splash: ^2.4.8
+  flutter_launcher_icons: ^0.14.4
+
+# This will add our logo to the loading screen of the app.
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/images/trailblazer_logo.png
+
+  # Required for Android 12 and newer
+  android_12:
+    image: assets/images/trailblazer_logo.png
+    icon_background_color: "#FFFFFF"
+
+# This create the app icon for trailblazers.
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false
+  image_path: "assets/images/icons/trailblazer_icon.png"
+  remove_alpha_ios: true
+  min_sdk_android: 21
+  addadaptive_icon_background: "#FFFFFF"
+  addadaptive_icon_foreground: "assets/images/icons/trailblazer_icon.png"
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
