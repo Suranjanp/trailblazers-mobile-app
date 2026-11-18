@@ -726,56 +726,66 @@ class _FitnessScreenState extends State<FitnessScreen> {
     final selectedType = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Choose a workout', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 16),
-              ConstrainedBox(
-                // Keep the picker within the available screen height. On
-                // smaller screens or with larger text, the options scroll
-                // instead of overflowing the bottom sheet.
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.52,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) {
+        final screenHeight = MediaQuery.of(context).size.height;
+
+        return SizedBox(
+          height: screenHeight * 0.65,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Choose a workout',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const ClampingScrollPhysics(),
-                  itemCount: _workoutTypes.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 1.15,
+                const SizedBox(height: 16),
+                Expanded(
+                  child: GridView.builder(
+                    itemCount: _workoutTypes.length,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: 1.15,
+                    ),
+                    itemBuilder: (context, index) {
+                      final type = _workoutTypes[index];
+
+                      return OutlinedButton(
+                        onPressed: () => Navigator.pop(context, type),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.all(8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(_iconFor(type), size: 25),
+                            const SizedBox(height: 6),
+                            Text(
+                              type,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                  itemBuilder: (context, index) {
-                  final type = _workoutTypes[index];
-                  return OutlinedButton(
-                    onPressed: () => Navigator.pop(context, type),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.all(8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(_iconFor(type), size: 25),
-                        const SizedBox(height: 6),
-                        Text(type, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
-                      ],
-                    ),
-                  );
-                  },
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
 
     if (selectedType != null && mounted) {
@@ -1865,7 +1875,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
-                childAspectRatio: 1.6,
+                childAspectRatio: 1.85,
                 children: [
                   _summaryCard(context, Icons.route, 'Longest walk', bestDistance(walking) > 0 ? '${bestDistance(walking).toStringAsFixed(2)} km' : '—'),
                   _summaryCard(context, Icons.directions_run, 'Longest run', bestDistance(running) > 0 ? '${bestDistance(running).toStringAsFixed(2)} km' : '—'),
@@ -1928,6 +1938,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     ),
                     title: Text(activity, style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text('${dateLabel(data)}\n${km.toStringAsFixed(2)} km · ${_formatDuration(seconds)}'),
+                    isThreeLine: true,
                     childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
                     children: [
                       if (points.length >= 2) ...[
@@ -2133,7 +2144,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
-                  childAspectRatio: 1.6,
+                  childAspectRatio: 1.85,
                   children: [
                     _summaryCard(context, Icons.route_outlined, 'Distance', '${totalDistance.toStringAsFixed(2)} km'),
                     _summaryCard(context, Icons.flag_outlined, 'Activities', '${sessions.length}'),
