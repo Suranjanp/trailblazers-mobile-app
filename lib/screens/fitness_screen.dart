@@ -1875,7 +1875,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
-                childAspectRatio: 1.85,
+                childAspectRatio: 1.6,
                 children: [
                   _summaryCard(context, Icons.route, 'Longest walk', bestDistance(walking) > 0 ? '${bestDistance(walking).toStringAsFixed(2)} km' : '—'),
                   _summaryCard(context, Icons.directions_run, 'Longest run', bestDistance(running) > 0 ? '${bestDistance(running).toStringAsFixed(2)} km' : '—'),
@@ -2143,7 +2143,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
-                  childAspectRatio: 1.85,
+                  childAspectRatio: 1.6,
                   children: [
                     _summaryCard(context, Icons.route_outlined, 'Distance', '${totalDistance.toStringAsFixed(2)} km'),
                     _summaryCard(context, Icons.flag_outlined, 'Activities', '${sessions.length}'),
