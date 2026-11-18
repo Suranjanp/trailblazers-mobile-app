@@ -1938,7 +1938,6 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     ),
                     title: Text(activity, style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text('${dateLabel(data)}\n${km.toStringAsFixed(2)} km · ${_formatDuration(seconds)}'),
-                    isThreeLine: true,
                     childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
                     children: [
                       if (points.length >= 2) ...[
