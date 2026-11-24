@@ -15,6 +15,12 @@ import 'nutrition_screen.dart';
 import 'schedule_screen.dart';
 import 'fitness_screen.dart';
 
+/// The main application shell that hosts each primary Trailblazer section.
+///
+/// A [PageView] keeps the selected section alive while allowing users to move
+/// between destinations with either horizontal swipes or the bottom bar.
+/// The profile widget is injectable so the shell can be reused with a custom
+/// profile implementation when needed.
 class MainScreen extends StatefulWidget {
   const MainScreen({
     super.key,
@@ -28,11 +34,15 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  // Controls page navigation and is disposed with this screen.
   final PageController _pageController = PageController();
+
+  // Used to randomize inspirational quotes without immediately repeating one.
   final Random _random = Random();
 
   int _currentPageIndex = 0;
 
+  // Keep destination titles and icons in the same order as the PageView pages.
   static const List<String> _titles = [
     'Home',
     'Schedule',
@@ -42,6 +52,8 @@ class _MainScreenState extends State<MainScreen> {
     'Profile',
   ];
 
+  // The profile destination is opened from the settings drawer rather than
+  // being included in the bottom navigation bar.
   static const List<IconData> _icons = [
     Icons.home_outlined,
     Icons.calendar_month_outlined,
@@ -50,6 +62,7 @@ class _MainScreenState extends State<MainScreen> {
     Icons.fitness_center,
   ];
 
+  // Quote pool displayed when the user taps the Trailblazer logo in the app bar.
   static const List<String> _quotes = [
     'Small steps every day lead to extraordinary destinations.',
     'You do not have to be perfect. You just have to keep showing up.',
@@ -93,6 +106,8 @@ class _MainScreenState extends State<MainScreen> {
     'The best time to improve yourself is always now.',
   ];
 
+  // A shuffled deck avoids selecting the same quote repeatedly until the pool
+  // has been used. _lastQuote is also checked when a new deck is created.
   late List<String> _quoteDeck;
   String? _lastQuote;
 
@@ -100,9 +115,13 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _shuffleQuotes();
+
+    // Load the device's saved notification preferences when the app shell opens.
     NotificationSettings.instance.load();
   }
 
+  /// Rebuilds the quote deck and prevents its first item from matching the
+  /// final quote shown from the previous deck.
   void _shuffleQuotes() {
     _quoteDeck = List<String>.from(_quotes)..shuffle(_random);
 
@@ -116,6 +135,7 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  /// Returns the next quote, refreshing the shuffled deck when it is empty.
   String _getRandomQuote() {
     if (_quoteDeck.isEmpty) {
       _shuffleQuotes();
@@ -126,6 +146,8 @@ class _MainScreenState extends State<MainScreen> {
     return quote;
   }
 
+  /// Opens the inspiration dialog. The dialog can be dismissed or replaced
+  /// with another quote without leaving the current app section.
   void _showInspirationalQuote() {
     final quote = _getRandomQuote();
 
@@ -202,6 +224,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  /// Animates to a primary destination selected in the bottom navigation bar.
   void _selectDestination(int index) {
     if (index < 0 || index >= _icons.length) return;
 
@@ -212,10 +235,13 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  /// Keeps the app-bar title and selected navigation item synchronized with
+  /// swipes and programmatic page changes.
   void _onPageChanged(int index) {
     setState(() => _currentPageIndex = index);
   }
 
+  /// Closes the end drawer before navigating directly to the profile page.
   void _openProfileFromDrawer() {
     Navigator.of(context).pop();
     _pageController.animateToPage(
@@ -225,6 +251,8 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  /// Confirms sign-out, clears cached calendar data, and returns the user to
+  /// authentication. Firebase errors are reported with a brief snackbar.
   Future<void> _signOut() async {
     final shouldSignOut = await showDialog<bool>(
       context: context,
@@ -265,6 +293,8 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  /// Builds the five primary destinations. Profile remains accessible from
+  /// the quick-settings drawer to preserve the existing navigation layout.
   Widget _buildBottomNavigationBar(BuildContext context) {
     return SafeArea(
       top: false,
@@ -331,6 +361,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    // Release the controller when the navigation shell is removed.
     _pageController.dispose();
     super.dispose();
   }
@@ -338,6 +369,8 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // The app bar remains consistent across sections; its title reflects the
+      // currently visible page and its logo opens the inspiration dialog.
       appBar: AppBar(
         backgroundColor: AppColors.navigationNavy,
         foregroundColor: Colors.white,
@@ -357,6 +390,7 @@ class _MainScreenState extends State<MainScreen> {
                     width: 38,
                     height: 38,
                     fit: BoxFit.contain,
+                    // Show a themed fallback if the image asset is unavailable.
                     errorBuilder: (context, error, stackTrace) {
                       return const Icon(
                         Icons.explore,
@@ -378,6 +412,8 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
         actions: [
+          // Builder supplies a context below the Scaffold so openEndDrawer()
+          // targets this Scaffold rather than an ancestor.
           Builder(
             builder: (appBarContext) => IconButton(
               tooltip: 'Quick settings',
@@ -393,6 +429,8 @@ class _MainScreenState extends State<MainScreen> {
         onOpenProfile: _openProfileFromDrawer,
         onSignOut: _signOut,
       ),
+      // Each destination is a page in one PageView. PageStorageKeys help retain
+      // page-specific scroll/state information when users switch sections.
       body: SafeArea(
         child: PageView(
           controller: _pageController,
@@ -419,6 +457,10 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
+/// The slide-out settings panel opened from the app bar.
+///
+/// It listens to the app and notification settings notifiers so switches and
+/// labels refresh immediately when a preference is changed.
 class _QuickSettingsDrawer extends StatelessWidget {
   const _QuickSettingsDrawer({
     required this.onOpenProfile,
@@ -431,11 +473,15 @@ class _QuickSettingsDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
+
+    // Keep the drawer proportionate on phones while capping its width on larger
+    // screens so it does not become excessively wide on tablets or desktop.
     final drawerWidth = min(screenWidth * 0.88, 380.0);
 
     return Drawer(
       width: drawerWidth,
       child: SafeArea(
+        // Rebuild only the drawer contents when either settings notifier changes.
         child: AnimatedBuilder(
           animation: Listenable.merge([
             AppSettings.instance,
@@ -470,6 +516,8 @@ class _QuickSettingsDrawer extends StatelessWidget {
                 const SizedBox(height: 18),
                 _sectionLabel('PREFERENCES'),
                 const SizedBox(height: 8),
+                // Measurement system is shared through AppSettings and is
+                // reflected throughout screens that display units.
                 Card(
                   elevation: 0,
                   color: colors.surfaceContainerLow,
@@ -519,6 +567,7 @@ class _QuickSettingsDrawer extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Theme changes are delegated to the shared settings service.
                 Card(
                   elevation: 0,
                   color: colors.surfaceContainerLow,
@@ -536,6 +585,8 @@ class _QuickSettingsDrawer extends StatelessWidget {
                 const SizedBox(height: 20),
                 _sectionLabel('NOTIFICATIONS'),
                 const SizedBox(height: 8),
+                // Notification controls are disabled when notifications are
+                // globally off or while the app is requesting permission.
                 Card(
                   elevation: 0,
                   color: colors.surfaceContainerLow,
@@ -606,6 +657,8 @@ class _QuickSettingsDrawer extends StatelessWidget {
                               ? notifications.setMotivation
                               : null,
                         ),
+                        // Lets the user choose how far ahead schedule alerts
+                        // should be delivered.
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                           child: Row(
@@ -666,6 +719,8 @@ class _QuickSettingsDrawer extends StatelessWidget {
                 const SizedBox(height: 20),
                 _sectionLabel('ACCOUNT'),
                 const SizedBox(height: 8),
+                // Profile navigation is handled by the parent shell so the
+                // drawer can close before the PageView changes destination.
                 Card(
                   elevation: 0,
                   color: colors.surfaceContainerLow,
@@ -713,6 +768,7 @@ class _QuickSettingsDrawer extends StatelessWidget {
     );
   }
 
+  /// Small visual heading used to separate groups of drawer preferences.
   Widget _sectionLabel(String label) {
     return Text(
       label,

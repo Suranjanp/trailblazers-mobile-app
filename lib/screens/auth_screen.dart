@@ -1,4 +1,3 @@
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -7,9 +6,12 @@ import 'profile_setup_screen.dart';
 import '../theme/app_colors.dart';
 import '../widgets/decorative_background.dart';
 
+/// Displays the authentication screen and lets a visitor log in, create an
+/// account, reset a password, or continue with an anonymous guest account.
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, this.signUp = false});
 
+  /// When true, the screen opens in account-creation mode instead of login.
   final bool signUp;
 
   @override
@@ -17,12 +19,16 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
+  // The form key lets us validate all visible fields before submitting.
   final _formKey = GlobalKey<FormState>();
+
+  // Controllers keep the text entered by the user available to the handlers.
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _name = TextEditingController();
   final _confirmPassword = TextEditingController();
 
+  // Screen and form state.
   bool _isLogin = true;
   bool _hidePassword = true;
   bool _rememberMe = false;
@@ -31,11 +37,14 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Use the constructor setting to choose the initial tab.
     _isLogin = !widget.signUp;
   }
 
   @override
   void dispose() {
+    // Always release text controllers when this screen is removed.
     _email.dispose();
     _password.dispose();
     _name.dispose();
@@ -43,10 +52,13 @@ class _AuthScreenState extends State<AuthScreen> {
     super.dispose();
   }
 
+  /// Clears the authentication flow from the navigation stack and opens Home.
   void _goHome() {
     Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
   }
 
+  /// Signs the visitor in anonymously so they can use the app without
+  /// creating an account.
   Future<void> _continueAsGuest() async {
     if (_submitting) return;
 
@@ -56,6 +68,7 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final auth = FirebaseAuth.instance;
 
+      // Avoid creating another anonymous session if one is already active.
       if (auth.currentUser?.isAnonymous != true) {
         await auth.signInAnonymously();
       }
@@ -70,17 +83,20 @@ class _AuthScreenState extends State<AuthScreen> {
         );
       }
     } finally {
+      // The screen may have been closed while Firebase was processing.
       if (mounted) {
         setState(() => _submitting = false);
       }
     }
   }
 
+  /// Validates the form, then either creates a new account or logs in.
   Future<void> _submit() async {
     if (_submitting || !_formKey.currentState!.validate()) {
       return;
     }
 
+    // Read the field values once before starting the asynchronous request.
     final name = _name.text.trim();
     final email = _email.text.trim();
     final password = _password.text;
@@ -92,6 +108,7 @@ class _AuthScreenState extends State<AuthScreen> {
       final auth = FirebaseAuth.instance;
 
       if (!_isLogin) {
+        // New accounts are created with Firebase Authentication.
         final credential = await auth.createUserWithEmailAndPassword(
           email: email,
           password: password,
@@ -100,6 +117,7 @@ class _AuthScreenState extends State<AuthScreen> {
         final user = credential.user;
         if (!mounted || user == null) return;
 
+        // New users complete their profile before entering the main app.
         Navigator.of(context).pushAndRemoveUntil<void>(
           MaterialPageRoute<void>(
             builder: (_) =>
@@ -109,6 +127,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
         return;
       } else {
+        // Existing users sign in with their email and password.
         await auth.signInWithEmailAndPassword(
           email: email,
           password: password,
@@ -117,10 +136,13 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (!mounted) return;
 
+      // Successful login takes the user directly to the Home route.
       Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
     } on FirebaseAuthException catch (error) {
       if (!mounted) return;
 
+      // Convert common Firebase error codes into messages that are useful
+      // without exposing technical details to the person using the app.
       final message = switch (error.code) {
         'email-already-in-use' => 'An account already uses this email.',
         'invalid-credential' ||
@@ -136,6 +158,7 @@ class _AuthScreenState extends State<AuthScreen> {
     } catch (error) {
       if (!mounted) return;
 
+      // Handle unexpected errors with a general message.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Something went wrong. Please try again.'),
@@ -148,6 +171,8 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  /// Sends a password-reset email for the address currently in the email
+  /// field. The user must enter a valid-looking address first.
   Future<void> _forgotPassword() async {
     final email = _email.text.trim();
 
@@ -184,6 +209,8 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  /// Switches between login and sign-up modes and clears password fields so
+  /// credentials from one mode are not carried into the other.
   void _changeMode(bool login) {
     setState(() {
       _isLogin = login;
@@ -207,6 +234,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final actionColor =
         isDark ? colors.primary : AppColors.navigationNavy;
 
+    // Slightly reduce text sizes on narrow phones to avoid cramped layouts.
     final screenWidth = MediaQuery.of(context).size.width;
     final smallScreen = screenWidth < 360;
 
@@ -218,6 +246,7 @@ class _AuthScreenState extends State<AuthScreen> {
       backgroundColor: theme.scaffoldBackgroundColor,
       body: Stack(
         children: [
+          // Decorative artwork fills the background behind the form.
           const Positioned.fill(child: DecorativeBackground()),
 
           SafeArea(
@@ -234,6 +263,8 @@ class _AuthScreenState extends State<AuthScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // App logo, with a built-in icon if the asset is
+                        // unavailable (for example, during development).
                         Center(
                           child: Image.asset(
                             'assets/images/top_icon.png',
@@ -263,7 +294,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
                         const SizedBox(height: 20),
 
-                        // Login / Signup selector
+                        // Login / signup selector. Each tab uses its own
+                        // brand color when selected.
                         Container(
                           height: 45,
                           decoration: BoxDecoration(
@@ -299,7 +331,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
                         const SizedBox(height: 15),
 
-                        // Name field - signup only
+                        // Name is only requested when creating a new account.
                         if (signUp) ...[
                           TextFormField(
                             controller: _name,
@@ -320,7 +352,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           const SizedBox(height: 15),
                         ],
 
-                        // Email field
+                        // Email is required in both login and signup modes.
                         TextFormField(
                           controller: _email,
                           keyboardType: TextInputType.emailAddress,
@@ -342,7 +374,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
                         const SizedBox(height: 15),
 
-                        // Password field
+                        // Password field. The eye button toggles whether the
+                        // entered password is visible.
                         TextFormField(
                           controller: _password,
                           obscureText: _hidePassword,
@@ -386,7 +419,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           },
                         ),
 
-                        // Confirm password - signup only
+                        // New accounts must enter the same password twice.
                         if (signUp) ...[
                           const SizedBox(height: 15),
                           TextFormField(
@@ -411,7 +444,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
                         const SizedBox(height: 10),
 
-                        // Remember Me and Forgot Password
+                        // These account options are shown only while logging
+                        // in. The remember-me checkbox currently tracks its
+                        // visual selection in this screen's state.
                         if (_isLogin)
                           Row(
                             children: [
@@ -448,7 +483,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
                         const SizedBox(height: 15),
 
-                        // Main action button
+                        // Main submit button. It is disabled during a
+                        // Firebase request and shows a small progress spinner.
                         SizedBox(
                           height: 45,
                           child: FilledButton(
@@ -488,7 +524,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
                         const SizedBox(height: 20),
 
-                        // Divider
+                        // Visual separator between account actions and the
+                        // alternate login/signup and guest options.
                         Row(
                           children: [
                             Expanded(
@@ -514,7 +551,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
                         const SizedBox(height: 20),
 
-                        // Switch login/signup
+                        // Offers the opposite account mode without leaving
+                        // the authentication screen.
                         Wrap(
                           alignment: WrapAlignment.center,
                           children: [
@@ -543,7 +581,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
                         const SizedBox(height: 12),
 
-                        // Guest login
+                        // Guest access creates or reuses an anonymous
+                        // Firebase Authentication session.
                         TextButton(
                           onPressed:
                               _submitting ? null : _continueAsGuest,
@@ -566,7 +605,10 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  // Login / Signup selector tab
+  /// Builds one side of the login/signup selector.
+  ///
+  /// The selected tab receives its brand background color; the inactive tab
+  /// remains transparent and uses the current theme's secondary text color.
   Widget _buildTab(String title, bool loginTab, Color tabColor) {
     final selected = _isLogin == loginTab;
     final colors = Theme.of(context).colorScheme;
@@ -593,7 +635,10 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  // Shared input styling
+  /// Creates the shared decoration used by the authentication text fields.
+  ///
+  /// Centralizing the borders, icons, hint text, and spacing keeps the form
+  /// fields visually consistent and makes future styling changes easier.
   InputDecoration _inputDecoration(String hint, IconData icon) {
     final colors = Theme.of(context).colorScheme;
 

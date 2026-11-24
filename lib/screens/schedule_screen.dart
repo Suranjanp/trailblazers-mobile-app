@@ -1,5 +1,7 @@
-
 import 'package:flutter/material.dart';
+
+import '../services/points_service.dart';
+
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as calendar;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
@@ -8,6 +10,8 @@ import 'package:test_ap_1/theme/app_colors.dart';
 import '../services/schedule_service.dart';
 import '../services/dashboard_calendar_cache.dart';
 
+// Stateful screen for managing the user's weekly/monthly schedule and tasks.
+// Google Calendar events are displayed alongside local entries but remain read-only.
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
 
@@ -16,6 +20,8 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
+  // Screen state is split between locally persisted entries and the separately
+  // fetched Google Calendar import so the two sources keep distinct permissions.
   // OAuth Web application client ID from Google Cloud Console.
   static const String _googleServerClientId =
       '292778398931-auju0e8upqita3plmv19ot3e2fkc8tsf.apps.googleusercontent.com';
@@ -27,7 +33,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   ];
 
   static const List<String> _weekdays = [
-    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
   ];
 
   // These colors are saved with each entry as an integer ARGB value.
@@ -40,6 +52,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     Color(0xFFFCE4EC), // pink
   ];
 
+  // Local schedule records are loaded and saved through ScheduleService.
+  // To-Do records share this collection and are identified by entryType.
   List<Map<String, dynamic>> _schedule = [];
   bool _isLoading = true;
   bool _showMonthView = false;
@@ -54,6 +68,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   DateTime? _googleLoadedRangeStart;
   DateTime? _googleLoadedRangeEnd;
 
+  // _weekStart is always normalized to Monday; _selectedDay identifies one
+  // weekday within that displayed week.
   late DateTime _weekStart;
   String _selectedDay = _weekdays[DateTime.now().weekday - 1];
 
@@ -65,6 +81,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     _loadSchedule();
   }
 
+  // Normalize dates before comparing them so time-of-day values do not affect
+  // day selection, recurrence matching, or calendar markers.
   DateTime _dateOnly(DateTime date) =>
       DateTime(date.year, date.month, date.day);
 
@@ -73,6 +91,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return _weekStart.add(Duration(days: index < 0 ? 0 : index));
   }
 
+  // Google Sign-In initialization is shared across screen instances. The
+  // flag prevents repeated SDK initialization during later refreshes.
   Future<void> _initializeGoogleSignIn() async {
     if (_googleSignInInitialized) return;
     await GoogleSignIn.instance.initialize(
@@ -81,6 +101,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     _googleSignInInitialized = true;
   }
 
+  // The API query uses a half-open range: one week in week mode, or the full
+  // calendar month in month mode. The end boundary is exclusive in the API.
   DateTimeRange _visibleGoogleCalendarRange() {
     if (_showMonthView) {
       final start = DateTime(_weekStart.year, _weekStart.month, 1);
@@ -93,6 +115,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
+  // First-time connection: authenticate the account, request only the
+  // declared read-only scopes, then import events for the visible date range.
   Future<void> _connectGoogleCalendar() async {
     if (_isGoogleCalendarLoading) return;
     setState(() {
@@ -103,19 +127,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       await _initializeGoogleSignIn();
       final account = await GoogleSignIn.instance.authenticate();
       _googleAccount = account;
-      final authorization = await account.authorizationClient
-          .authorizeScopes(_googleCalendarScopes);
+      final authorization = await account.authorizationClient.authorizeScopes(
+        _googleCalendarScopes,
+      );
       await _loadGoogleCalendarEvents(authorization: authorization);
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _googleCalendarError =
-            'Could not connect to Google Calendar. Check your Google sign-in and Calendar API setup, then try again.';
+        _googleCalendarError = 'Could not connect to Google Calendar. Check your Google sign-in and Calendar API setup, then try again.';
         _isGoogleCalendarLoading = false;
       });
     }
   }
 
+  // Reuse the authenticated account for refreshes. When force is false, skip
+  // an API request if the currently visible range has already been loaded.
   Future<void> _refreshGoogleCalendar({bool force = true}) async {
     final account = _googleAccount;
     if (account == null || _isGoogleCalendarLoading) return;
@@ -135,8 +161,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       await _initializeGoogleSignIn();
       var authorization = await account.authorizationClient
           .authorizationForScopes(_googleCalendarScopes);
-      authorization ??= await account.authorizationClient
-          .authorizeScopes(_googleCalendarScopes);
+      authorization ??= await account.authorizationClient.authorizeScopes(
+        _googleCalendarScopes,
+      );
       await _loadGoogleCalendarEvents(authorization: authorization);
     } catch (error) {
       if (!mounted) return;
@@ -147,6 +174,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
+  // Read every accessible calendar and every page of events for the visible
+  // range. Imported records are display data only; they are never saved locally.
   Future<void> _loadGoogleCalendarEvents({
     required GoogleSignInClientAuthorization authorization,
   }) async {
@@ -174,10 +203,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           if (calendarId == null || calendarId.isEmpty) continue;
           final calendarName =
               (calendarEntry.summaryOverride?.trim().isNotEmpty ?? false)
-                  ? calendarEntry.summaryOverride!.trim()
-                  : (calendarEntry.summary?.trim().isNotEmpty ?? false)
-                      ? calendarEntry.summary!.trim()
-                      : 'Google Calendar';
+              ? calendarEntry.summaryOverride!.trim()
+              : (calendarEntry.summary?.trim().isNotEmpty ?? false)
+              ? calendarEntry.summary!.trim()
+              : 'Google Calendar';
 
           try {
             String? eventPageToken;
@@ -207,8 +236,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 final endValue = event.end?.dateTime ?? event.end?.date;
                 final start = startValue.toLocal();
                 final end = endValue?.toLocal();
-                final duration =
-                    end == null ? 0 : end.difference(start).inMinutes;
+                final duration = end == null
+                    ? 0
+                    : end.difference(start).inMinutes;
                 imported.add({
                   'externalGoogle': true,
                   'googleEventId': event.id ?? '',
@@ -260,49 +290,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
-  Future<void> _copyGoogleEventToSchedule(
-    Map<String, dynamic> googleEvent,
-  ) async {
-    final eventId = googleEvent['googleEventId']?.toString() ?? '';
-    final calendarId = googleEvent['googleCalendarId']?.toString() ?? '';
-    final date = googleEvent['date']?.toString() ?? '';
-    final sourceKey = '$calendarId|$eventId|$date';
-
-    final alreadyCopied = _schedule.any(
-      (entry) => entry['googleSourceKey'] == sourceKey,
-    );
-    if (alreadyCopied) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This Google Calendar event is already in Trailblazer.')),
-      );
-      return;
-    }
-
-    final seed = <String, dynamic>{
-      'name': googleEvent['name'] ?? '(No title)',
-      'location': googleEvent['location'] ?? '',
-      'date': date,
-      'startTime': googleEvent['startTime'],
-      'endTime': googleEvent['endTime'],
-      'duration': googleEvent['duration'] ?? 0,
-      'allDay': googleEvent['allDay'] == true,
-      'repeatFrequency': 'none',
-      'repeatWeekly': false,
-      'repeatYearly': false,
-      'days': <String>[],
-      'googleSourceKey': sourceKey,
-      'colorValue': _eventColors[1].toARGB32(),
-    };
-
-    await _openScheduleEditor(entry: seed);
-    if (!mounted) return;
-    if (_schedule.any((entry) => entry['googleSourceKey'] == sourceKey)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Google event copied to your Trailblazer schedule.')),
-      );
-    }
-  }
-
+  // Used by the month grid to mark dates containing imported Google events.
   bool _googleEventOccursOn(DateTime date) {
     return _googleEvents.any((event) {
       final parsed = DateTime.tryParse(event['date']?.toString() ?? '');
@@ -310,14 +298,40 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
   }
 
+  // Load local entries and migrate older To-Do records to stable IDs. The
+  // migration deliberately does not award points for historical completions.
   Future<void> _loadSchedule() async {
     try {
       final entries = await ScheduleService.loadEntries();
+      final loadedEntries = entries
+          .map((entry) => Map<String, dynamic>.from(entry))
+          .toList();
+
+      // Give older To-Do entries a permanent ID. This migration does not
+      // award points for tasks that were already completed before the
+      // points system was introduced.
+      var needsMigrationSave = false;
+      for (final entry in loadedEntries) {
+        if (entry['entryType'] != 'todo') continue;
+        final existingId = entry['id']?.toString().trim() ?? '';
+        if (existingId.isEmpty) {
+          entry['id'] =
+              'todo_${DateTime.now().microsecondsSinceEpoch}_${loadedEntries.indexOf(entry)}';
+          needsMigrationSave = true;
+        }
+      }
+      if (needsMigrationSave) {
+        try {
+          await ScheduleService.saveEntries(loadedEntries);
+        } catch (_) {
+          // Continue displaying the loaded schedule if migration persistence
+          // fails. A later successful save will persist the generated IDs.
+        }
+      }
+
       if (!mounted) return;
       setState(() {
-        _schedule = entries
-            .map((entry) => Map<String, dynamic>.from(entry))
-            .toList();
+        _schedule = loadedEntries;
         _isLoading = false;
         _errorMessage = null;
       });
@@ -330,22 +344,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
-  Future<void> _persistSchedule(List<Map<String, dynamic>> updated) async {
+  // Central persistence path for local changes. The UI state is updated only
+  // after ScheduleService confirms that the new list was saved successfully.
+  Future<bool> _persistSchedule(List<Map<String, dynamic>> updated) async {
     try {
       await ScheduleService.saveEntries(updated);
-      if (!mounted) return;
+      if (!mounted) return true;
       setState(() {
         _schedule = updated;
         _errorMessage = null;
       });
+      return true;
     } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to save your schedule.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to save your schedule.')),
+        );
+      }
+      return false;
     }
   }
 
+  // Add a new local record or replace an existing record at its list index.
   Future<void> _saveScheduleEntry(
     Map<String, dynamic> entry, {
     int? index,
@@ -361,6 +381,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     await _persistSchedule(updated);
   }
 
+  // Confirm deletion before removing a local record. Callers only pass local
+  // indexes; imported Google events use negative indexes and cannot be deleted.
   Future<void> _deleteScheduleEntry(int index) async {
     if (index < 0 || index >= _schedule.length) return;
 
@@ -389,16 +411,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
 
     if (confirmed != true || !mounted) return;
-    final updated = List<Map<String, dynamic>>.from(_schedule)
-      ..removeAt(index);
+    final updated = List<Map<String, dynamic>>.from(_schedule)..removeAt(index);
     await _persistSchedule(updated);
   }
 
+  // Read both the current multi-day format and the legacy single 'day' field
+  // so schedules saved by older app versions continue to display correctly.
   List<String> _daysForEntry(Map<String, dynamic> entry) {
     final rawDays = entry['days'];
     if (rawDays is List && rawDays.isNotEmpty) {
-      return rawDays.map((day) => day.toString())
-          .where(_weekdays.contains).toSet().toList();
+      return rawDays
+          .map((day) => day.toString())
+          .where(_weekdays.contains)
+          .toSet()
+          .toList();
     }
     final legacyDay = entry['day']?.toString();
     if (legacyDay != null && _weekdays.contains(legacyDay)) {
@@ -407,49 +433,26 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return [];
   }
 
-  bool _entryOccursOnDate(Map<String, dynamic> entry, DateTime date) {
+  // Apply the entry's recurrence rule against the currently selected date.
+  // To-Dos are handled separately because each task belongs to one date.
+  bool _isVisibleOnSelectedDay(Map<String, dynamic> entry) {
     if (entry['entryType'] == 'todo') return false;
-
-    // New entries use repeatFrequency. Older saved entries keep working via
-    // their original repeatWeekly/repeatYearly fields.
-    final frequency = entry['repeatFrequency']?.toString() ??
-        (entry['repeatYearly'] == true
-            ? 'yearly'
-            : entry['repeatWeekly'] == false
-                ? 'none'
-                : 'weekly');
-    final selected = _dateOnly(date);
-
-    // Legacy weekly entries intentionally have no anchor date.
-    if (frequency == 'weekly') {
-      return _daysForEntry(entry).contains(_weekdays[selected.weekday - 1]);
+    final selectedDate = _dateForDay(_selectedDay);
+    if (entry['repeatYearly'] == true) {
+      final parsed = DateTime.tryParse(entry['date']?.toString() ?? '');
+      return parsed != null &&
+          parsed.month == selectedDate.month &&
+          parsed.day == selectedDate.day;
     }
-
-    final startDate = DateTime.tryParse(entry['date']?.toString() ?? '');
-    if (startDate == null) return false;
-    final anchor = _dateOnly(startDate);
-    if (selected.isBefore(anchor)) return false;
-    final repeatUntil = DateTime.tryParse(entry['repeatUntil']?.toString() ?? '');
-    if (repeatUntil != null && selected.isAfter(_dateOnly(repeatUntil))) {
-      return false;
+    if (entry['repeatWeekly'] != false) {
+      return _daysForEntry(entry).contains(_selectedDay);
     }
-
-    switch (frequency) {
-      case 'daily':
-        return true;
-      case 'monthly':
-        return selected.day == anchor.day;
-      case 'yearly':
-        return selected.month == anchor.month && selected.day == anchor.day;
-      case 'none':
-      default:
-        return selected == anchor;
-    }
+    final parsed = DateTime.tryParse(entry['date']?.toString() ?? '');
+    return parsed != null && _dateOnly(parsed) == selectedDate;
   }
 
-  bool _isVisibleOnSelectedDay(Map<String, dynamic> entry) =>
-      _entryOccursOnDate(entry, _dateForDay(_selectedDay));
-
+  // Return tasks for the selected date, ordered by descending importance and
+  // then by their original list position for a stable display order.
   List<MapEntry<int, Map<String, dynamic>>> _todosForSelectedDay() {
     final selectedDate = _dateForDay(_selectedDay);
     final todos = _schedule.asMap().entries.where((entry) {
@@ -467,6 +470,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return todos;
   }
 
+  // Create a date-specific To-Do with a stable ID and an importance value.
+  // The task is persisted through the same local schedule service as events.
   Future<void> _addTodo() async {
     // Let TextFormField manage its own controller lifecycle. A manually
     // disposed controller can still be accessed while Flutter is closing
@@ -499,7 +504,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   const Spacer(),
                   Text(
                     '$importance / 5',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF263746)),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF263746),
+                    ),
                   ),
                 ],
               ),
@@ -528,11 +536,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 if (title.isEmpty) return;
 
                 Navigator.pop(dialogContext, {
+                  'id': 'todo_${DateTime.now().microsecondsSinceEpoch}',
                   'entryType': 'todo',
                   'name': title,
-                  'date': _dateOnly(
-                    _dateForDay(_selectedDay),
-                  ).toIso8601String(),
+                  'date': _dateOnly(_dateForDay(_selectedDay))
+                      .toIso8601String(),
                   'completed': false,
                   'importance': importance,
                 });
@@ -549,12 +557,65 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
+  // Save completion first; award points only for a successful transition
+  // from incomplete to complete. PointsService uses the task ID as an
+  // idempotency key, protecting against duplicate awards on retries.
   Future<void> _toggleTodo(int index, bool completed) async {
+    if (index < 0 || index >= _schedule.length) return;
+
+    final original = _schedule[index];
+    final wasCompleted = original['completed'] == true;
     final updated = List<Map<String, dynamic>>.from(_schedule);
-    updated[index] = {...updated[index], 'completed': completed};
-    await _persistSchedule(updated);
+    final updatedEntry = Map<String, dynamic>.from(original);
+    updatedEntry['completed'] = completed;
+
+    // Ensure even a legacy entry has a stable ID before it can earn points.
+    final id = updatedEntry['id']?.toString().trim().isNotEmpty == true
+        ? updatedEntry['id'].toString()
+        : 'todo_${DateTime.now().microsecondsSinceEpoch}';
+    updatedEntry['id'] = id;
+    updated[index] = updatedEntry;
+
+    final saved = await _persistSchedule(updated);
+    if (!saved || !completed || wasCompleted) return;
+
+    final rawImportance = (updatedEntry['importance'] as num?)?.toInt() ?? 1;
+    final importance = rawImportance.clamp(1, 5).toInt();
+    try {
+      final result = await PointsService.instance.awardActivity(
+        type: PointsActivityType.todo,
+        sourceId: id,
+        title: updatedEntry['name']?.toString() ?? 'To-Do task',
+        importance: importance,
+        metadata: <String, dynamic>{
+          'completedAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      if (result != null && result.awarded) {
+        _showPointsMessage(
+          'Task completed! You earned ${result.points} points.',
+        );
+      }
+    } catch (_) {
+      // The task remains completed if points sync fails. The points service
+      // uses the same stable ID, so a later retry cannot double-award.
+      _showPointsMessage(
+        'Task completed, but points could not be synced. Please try again later.',
+      );
+    }
   }
 
+  // Keep points feedback in one helper and avoid using a disposed screen's
+  // ScaffoldMessenger after an asynchronous operation completes.
+  void _showPointsMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // Task list for the selected date, including completion progress, editing
+  // importance, deletion, and the add-task action.
   Widget _buildTodoSection() {
     final todos = _todosForSelectedDay();
     return Padding(
@@ -564,13 +625,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         children: [
           Row(
             children: [
-              Text('To-do list',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+              Text(
+                'To-do list',
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const Spacer(),
-              Text('${todos.where((e) => e.value['completed'] == true).length}/${todos.length} done',
-                  style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                '${todos.where((e) => e.value['completed'] == true).length}/${todos.length} done',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               IconButton(
                 tooltip: 'Add task',
                 onPressed: _addTodo,
@@ -598,7 +662,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     item['name']?.toString() ?? 'Task',
                     style: TextStyle(
                       decoration: completed ? TextDecoration.lineThrough : null,
-                      color: completed ? Theme.of(context).colorScheme.onSurfaceVariant : null,
+                      color: completed
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : null,
                     ),
                   ),
                   subtitle: Text('Importance: $importance / 5'),
@@ -607,15 +673,26 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       if (value == 'delete') _deleteScheduleEntry(todo.key);
                       if (value.startsWith('rank')) {
                         final rank = int.parse(value.substring(4));
-                        final updated = List<Map<String, dynamic>>.from(_schedule);
-                        updated[todo.key] = {...updated[todo.key], 'importance': rank};
+                        final updated = List<Map<String, dynamic>>.from(
+                          _schedule,
+                        );
+                        updated[todo.key] = {
+                          ...updated[todo.key],
+                          'importance': rank,
+                        };
                         _persistSchedule(updated);
                       }
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Delete'),
+                      ),
                       for (var rank = 1; rank <= 5; rank++)
-                        PopupMenuItem(value: 'rank$rank', child: Text('Set importance $rank')),
+                        PopupMenuItem(
+                          value: 'rank$rank',
+                          child: Text('Set importance $rank'),
+                        ),
                     ],
                   ),
                 ),
@@ -626,6 +703,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
+  // Schedule times are stored as zero-padded 24-hour HH:mm strings. These
+  // helpers convert them for sorting and locale-aware display.
   int _minutesFromTime(String? value) {
     if (value == null || !value.contains(':')) return -1;
     final parts = value.split(':');
@@ -654,9 +733,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return '$leftover min';
   }
 
+  // Combine matching local entries with Google imports for the selected day.
+  // Local indexes are non-negative; negative indexes safely distinguish
+  // imported entries from records that may be edited or deleted locally.
   List<MapEntry<int, Map<String, dynamic>>> _entriesForSelectedDay() {
     final selectedDate = _dateForDay(_selectedDay);
-    final entries = _schedule.asMap().entries
+    final entries = _schedule
+        .asMap()
+        .entries
         .where((entry) => _isVisibleOnSelectedDay(entry.value))
         .toList();
 
@@ -680,6 +764,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return entries;
   }
 
+  // Shared time-picker wrapper used by the schedule editor's start/end fields.
   Future<void> _pickTime({
     required BuildContext dialogContext,
     required TimeOfDay initial,
@@ -696,6 +781,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       '${time.hour.toString().padLeft(2, '0')}:'
       '${time.minute.toString().padLeft(2, '0')}';
 
+  // Add/edit dialog for local classes and activities. The dialog owns its
+  // temporary field values; only a validated result is returned for saving.
   Future<void> _openScheduleEditor({
     Map<String, dynamic>? entry,
     int? index,
@@ -715,29 +802,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ? const TimeOfDay(hour: 10, minute: 0)
         : TimeOfDay(hour: oldEnd ~/ 60, minute: oldEnd % 60);
 
-    String repeatFrequency = entry == null
-        ? 'weekly'
-        : entry['repeatFrequency']?.toString() ??
-            (entry['repeatYearly'] == true
-                ? 'yearly'
-                : entry['repeatWeekly'] == false
-                    ? 'none'
-                    : 'weekly');
-    bool allDay = entry?['allDay'] == true;
+    bool repeatWeekly = entry == null
+        ? true
+        : entry['repeatWeekly'] != false && entry['repeatYearly'] != true;
+    bool repeatYearly = entry?['repeatYearly'] == true;
     List<String> selectedDays = entry == null
         ? [_selectedDay]
         : _daysForEntry(entry);
     if (selectedDays.isEmpty) selectedDays = [_selectedDay];
 
-    DateTime selectedDate = DateTime.tryParse(
-          entry?['date']?.toString() ?? '',
-        ) ??
+    DateTime selectedDate =
+        DateTime.tryParse(entry?['date']?.toString() ?? '') ??
         _dateForDay(_selectedDay);
-    DateTime? repeatUntil = DateTime.tryParse(
-      entry?['repeatUntil']?.toString() ?? '',
-    );
 
-    int selectedColor = (entry?['colorValue'] as num?)?.toInt() ??
+    int selectedColor =
+        (entry?['colorValue'] as num?)?.toInt() ??
         _eventColors.first.toARGB32();
 
     final result = await showDialog<Map<String, dynamic>>(
@@ -750,9 +829,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             final duration = endMinutes - startMinutes;
 
             return AlertDialog(
-              title: Text(index == null
-                  ? 'Add class or activity'
-                  : 'Edit schedule entry'),
+              title: Text(
+                index == null ? 'Add class or activity' : 'Edit schedule entry',
+              ),
               content: SizedBox(
                 width: 380,
                 child: SingleChildScrollView(
@@ -779,53 +858,42 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           border: OutlineInputBorder(),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('All-day event'),
-                        value: allDay,
-                        onChanged: (value) => setDialogState(() => allDay = value),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Start and end time',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      if (!allDay) ...[
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Start and end time',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.access_time),
-                                label: Text(startTime.format(context)),
-                                onPressed: () => _pickTime(
-                                  dialogContext: dialogContext,
-                                  initial: startTime,
-                                  onPicked: (time) => setDialogState(
-                                    () => startTime = time,
-                                  ),
-                                ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.access_time),
+                              label: Text(startTime.format(context)),
+                              onPressed: () => _pickTime(
+                                dialogContext: dialogContext,
+                                initial: startTime,
+                                onPicked: (time) =>
+                                    setDialogState(() => startTime = time),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.flag_outlined),
-                                label: Text(endTime.format(context)),
-                                onPressed: () => _pickTime(
-                                  dialogContext: dialogContext,
-                                  initial: endTime,
-                                  onPicked: (time) => setDialogState(
-                                    () => endTime = time,
-                                  ),
-                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.flag_outlined),
+                              label: Text(endTime.format(context)),
+                              onPressed: () => _pickTime(
+                                dialogContext: dialogContext,
+                                initial: endTime,
+                                onPicked: (time) =>
+                                    setDialogState(() => endTime = time),
                               ),
                             ),
-                          ],
-                        ),
-                      ],
-                      if (!allDay && duration > 0) ...[
+                          ),
+                        ],
+                      ),
+                      if (duration > 0) ...[
                         const SizedBox(height: 6),
                         Text(
                           'Duration: ${_formatMinutes(duration)}',
@@ -833,61 +901,30 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        initialValue: repeatFrequency,
-                        decoration: const InputDecoration(
-                          labelText: 'Repeat',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'none', child: Text('Does not repeat')),
-                          DropdownMenuItem(value: 'daily', child: Text('Daily')),
-                          DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-                          DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
-                          DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setDialogState(() => repeatFrequency = value);
-                        },
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Repeat weekly'),
+                        subtitle: const Text('Repeat on selected weekdays.'),
+                        value: repeatWeekly,
+                        onChanged: (value) => setDialogState(() {
+                          repeatWeekly = value;
+                          if (value) repeatYearly = false;
+                        }),
                       ),
-                      if (repeatFrequency != 'none') ...[
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                repeatUntil == null
-                                    ? 'No end date'
-                                    : 'Ends ${repeatUntil!.month}/${repeatUntil!.day}/${repeatUntil!.year}',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () async {
-                                final picked = await showDatePicker(
-                                  context: dialogContext,
-                                  initialDate: repeatUntil ?? selectedDate,
-                                  firstDate: selectedDate,
-                                  lastDate: DateTime(2100),
-                                );
-                                if (picked != null) {
-                                  setDialogState(() => repeatUntil = picked);
-                                }
-                              },
-                              child: Text(repeatUntil == null ? 'Set end date' : 'Change'),
-                            ),
-                            if (repeatUntil != null)
-                              IconButton(
-                                tooltip: 'Remove end date',
-                                onPressed: () => setDialogState(() => repeatUntil = null),
-                                icon: const Icon(Icons.close),
-                              ),
-                          ],
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Repeat yearly'),
+                        subtitle: const Text(
+                          'For birthdays and anniversaries.',
                         ),
-                      ],
+                        value: repeatYearly,
+                        onChanged: (value) => setDialogState(() {
+                          repeatYearly = value;
+                          if (value) repeatWeekly = false;
+                        }),
+                      ),
                       const SizedBox(height: 8),
-                      if (repeatFrequency == 'weekly') ...[
+                      if (repeatWeekly) ...[
                         const Text(
                           'Repeat on',
                           style: TextStyle(fontWeight: FontWeight.bold),
@@ -901,8 +938,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             return FilterChip(
                               label: Text(day),
                               selected: selected,
-                              selectedColor: AppColors.actionBlue
-                                  .withValues(alpha: 0.2),
+                              selectedColor: AppColors.actionBlue.withValues(
+                                alpha: 0.2,
+                              ),
                               onSelected: (value) {
                                 setDialogState(() {
                                   if (value) {
@@ -917,7 +955,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         ),
                       ] else ...[
                         const Text(
-                          'Start date',
+                          'Date',
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
@@ -962,7 +1000,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                 border: Border.all(
                                   color: selected
                                       ? AppColors.navigationNavy
-                                      : Theme.of(context).colorScheme.outline.withValues(alpha: 0.45),
+                                      : Theme.of(context).colorScheme.outline
+                                            .withValues(alpha: 0.45),
                                   width: selected ? 3 : 1,
                                 ),
                               ),
@@ -999,7 +1038,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       );
                       return;
                     }
-                    if (!allDay && duration <= 0) {
+                    if (duration <= 0) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
                         const SnackBar(
                           content: Text('End time must be after start time.'),
@@ -1007,7 +1046,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       );
                       return;
                     }
-                    if (repeatFrequency == 'weekly' && selectedDays.isEmpty) {
+                    if (repeatWeekly && selectedDays.isEmpty) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
                         const SnackBar(
                           content: Text('Select at least one weekday.'),
@@ -1017,8 +1056,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     }
 
                     selectedDays.sort(
-                      (a, b) => _weekdays.indexOf(a)
-                          .compareTo(_weekdays.indexOf(b)),
+                      (a, b) =>
+                          _weekdays.indexOf(a).compareTo(_weekdays.indexOf(b)),
                     );
 
                     Navigator.pop(dialogContext, {
@@ -1027,21 +1066,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       // Keep duration for compatibility with older entries.
                       'duration': duration,
                       // Keep day for compatibility with the original format.
-                      'day': repeatFrequency == 'weekly'
+                      'day': repeatWeekly
                           ? selectedDays.first
                           : _weekdays[selectedDate.weekday - 1],
-                      'days': repeatFrequency == 'weekly' ? selectedDays : <String>[],
-                      'repeatFrequency': repeatFrequency,
-                      'repeatWeekly': repeatFrequency == 'weekly',
-                      'repeatYearly': repeatFrequency == 'yearly',
-                      'date': _dateOnly(selectedDate).toIso8601String(),
-                      'repeatUntil': repeatFrequency == 'none' || repeatUntil == null
+                      'days': repeatWeekly ? selectedDays : <String>[],
+                      'repeatWeekly': repeatWeekly,
+                      'repeatYearly': repeatYearly,
+                      'date': repeatWeekly
                           ? null
-                          : _dateOnly(repeatUntil!).toIso8601String(),
-                      'allDay': allDay,
-                      'startTime': allDay ? null : _timeToStorage(startTime),
-                      'endTime': allDay ? null : _timeToStorage(endTime),
-                      'googleSourceKey': entry?['googleSourceKey'],
+                          : _dateOnly(selectedDate).toIso8601String(),
+                      'startTime': _timeToStorage(startTime),
+                      'endTime': _timeToStorage(endTime),
                       'colorValue': selectedColor,
                     });
                   },
@@ -1059,6 +1094,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
+  // Move the visible week by a whole number of weeks, then refresh the
+  // Google import only if the newly visible range has not already been loaded.
   void _changeWeek(int amount) {
     setState(() {
       _weekStart = _weekStart.add(Duration(days: amount * 7));
@@ -1074,12 +1111,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   String _monthName(int month) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return months[month - 1];
   }
 
+  // Month calendar: selects a date and marks days containing local recurring,
+  // one-off, or imported Google Calendar entries.
   Widget _buildMonthGrid() {
     final first = DateTime(_weekStart.year, _weekStart.month, 1);
     final offset = first.weekday - 1;
@@ -1089,9 +1138,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return Column(
       children: [
         Row(
-          children: _weekdays.map((day) => Expanded(
-            child: Center(child: Text(day, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-          )).toList(),
+          children: _weekdays
+              .map(
+                (day) => Expanded(
+                  child: Center(
+                    child: Text(
+                      day,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
         ),
         const SizedBox(height: 6),
         GridView.builder(
@@ -1104,15 +1165,36 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ),
           itemBuilder: (context, index) {
             final dayNumber = index - offset + 1;
-            if (dayNumber < 1 || dayNumber > daysInMonth) return const SizedBox.shrink();
+            if (dayNumber < 1 || dayNumber > daysInMonth) {
+              return const SizedBox.shrink();
+            }
             final date = DateTime(_weekStart.year, _weekStart.month, dayNumber);
             final isSelected = _dateOnly(selected) == date;
-            final hasEntries = _googleEventOccursOn(date) ||
-                _schedule.any((entry) => _entryOccursOnDate(entry, date));
+            final hasEntries =
+                _googleEventOccursOn(date) ||
+                _schedule.any((entry) {
+                  if (entry['entryType'] == 'todo') return false;
+                  if (entry['repeatYearly'] == true) {
+                    final d = DateTime.tryParse(
+                      entry['date']?.toString() ?? '',
+                    );
+                    return d != null &&
+                        d.month == date.month &&
+                        d.day == date.day;
+                  }
+                  if (entry['repeatWeekly'] == true) {
+                    return _daysForEntry(entry)
+                        .contains(_weekdays[date.weekday - 1]);
+                  }
+                  final d = DateTime.tryParse(entry['date']?.toString() ?? '');
+                  return d != null && _dateOnly(d) == date;
+                });
             return InkWell(
               onTap: () {
                 setState(() {
-                  _weekStart = _dateOnly(date.subtract(Duration(days: date.weekday - 1)));
+                  _weekStart = _dateOnly(
+                    date.subtract(Duration(days: date.weekday - 1)),
+                  );
                   _selectedDay = _weekdays[date.weekday - 1];
                 });
                 if (!_showMonthView) _refreshGoogleCalendar(force: false);
@@ -1120,23 +1202,36 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               child: Container(
                 margin: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.navigationNavy : Colors.transparent,
+                  color: isSelected
+                      ? AppColors.navigationNavy
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('$dayNumber', style: TextStyle(
-                      color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    )),
-                    if (hasEntries) Container(
-                      width: 4, height: 4,
-                      decoration: BoxDecoration(
-                        color: isSelected ? Colors.white : AppColors.actionBlue,
-                        shape: BoxShape.circle,
+                    Text(
+                      '$dayNumber',
+                      style: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : Theme.of(context).colorScheme.onSurface,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                       ),
                     ),
+                    if (hasEntries)
+                      Container(
+                        width: 4,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.white
+                              : AppColors.actionBlue,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1147,6 +1242,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
+  // Shared date navigation for week and month modes. Tapping the central
+  // label switches modes; the arrows move by a week or a calendar month.
   Widget _buildWeekSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1157,7 +1254,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               tooltip: 'Previous week',
               onPressed: () {
                 if (_showMonthView) {
-                  setState(() => _weekStart = DateTime(_weekStart.year, _weekStart.month - 1, 1));
+                  setState(
+                    () => _weekStart = DateTime(
+                      _weekStart.year,
+                      _weekStart.month - 1,
+                      1,
+                    ),
+                  );
                   _refreshGoogleCalendar(force: false);
                 } else {
                   _changeWeek(-1);
@@ -1183,8 +1286,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      Text('Tap to view month',
-                          style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      Text(
+                        'Tap to view month',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1194,7 +1302,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               tooltip: 'Next week',
               onPressed: () {
                 if (_showMonthView) {
-                  setState(() => _weekStart = DateTime(_weekStart.year, _weekStart.month + 1, 1));
+                  setState(
+                    () => _weekStart = DateTime(
+                      _weekStart.year,
+                      _weekStart.month + 1,
+                      1,
+                    ),
+                  );
                   _refreshGoogleCalendar(force: false);
                 } else {
                   _changeWeek(1);
@@ -1208,68 +1322,70 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           const SizedBox(height: 8),
           _buildMonthGrid(),
         ] else
-        Row(
-          children: List.generate(_weekdays.length, (index) {
-            final day = _weekdays[index];
-            final date = _weekStart.add(Duration(days: index));
-            final selected = _selectedDay == day;
-            final isToday = _dateOnly(DateTime.now()) == date;
+          Row(
+            children: List.generate(_weekdays.length, (index) {
+              final day = _weekdays[index];
+              final date = _weekStart.add(Duration(days: index));
+              final selected = _selectedDay == day;
+              final isToday = _dateOnly(DateTime.now()) == date;
 
-            return Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: () => setState(() => _selectedDay = day),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 9),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? AppColors.navigationNavy
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(14),
-                      border: isToday && !selected
-                          ? Border.all(color: AppColors.actionBlue)
-                          : null,
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          day,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: selected
-                                ? Colors.white
-                                : Theme.of(context).colorScheme.onSurfaceVariant,
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => setState(() => _selectedDay = day),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppColors.navigationNavy
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
+                        border: isToday && !selected
+                            ? Border.all(color: AppColors.actionBlue)
+                            : null,
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            day,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: selected
+                                  ? Colors.white
+                                  : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          '${date.day}',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: selected
-                                ? Colors.white
-                                : Theme.of(context).colorScheme.onSurface,
+                          const SizedBox(height: 5),
+                          Text(
+                            '${date.day}',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: selected
+                                  ? Colors.white
+                                  : Theme.of(context).colorScheme.onSurface,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          }),
-        ),
+              );
+            }),
+          ),
       ],
     );
   }
 
-  Widget _buildEntryCard(
-    MapEntry<int, Map<String, dynamic>> scheduleEntry,
-  ) {
+  // Render one local or imported event. Google entries show a lock and omit
+  // edit/delete actions, while local entries expose the schedule editor menu.
+  Widget _buildEntryCard(MapEntry<int, Map<String, dynamic>> scheduleEntry) {
     final index = scheduleEntry.key;
     final item = scheduleEntry.value;
     final title = item['name']?.toString() ?? 'Entry';
@@ -1281,24 +1397,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final cardColor = colorValue == null
         ? _eventColors.first
         : Color(colorValue);
-    final frequency = item['repeatFrequency']?.toString() ??
-        (item['repeatYearly'] == true
-            ? 'yearly'
-            : item['repeatWeekly'] == false
-                ? 'none'
-                : 'weekly');
+    final isRepeating = item['repeatWeekly'] == true;
+    final isYearly = item['repeatYearly'] == true;
     final isGoogleEvent = item['externalGoogle'] == true;
     final googleCalendarName =
         item['googleCalendarName']?.toString() ?? 'Google Calendar';
-    final repeatLabel = frequency == 'none'
-        ? ''
-        : '\nRepeats ${frequency == 'weekly' ? 'weekly' : frequency}';
 
     final timeText = item['allDay'] == true
         ? 'All day'
         : _minutesFromTime(start) >= 0 && _minutesFromTime(end) >= 0
-            ? '${_formatTime(start)} – ${_formatTime(end)}'
-            : _formatMinutes(duration);
+        ? '${_formatTime(start)} – ${_formatTime(end)}'
+        : _formatMinutes(duration);
 
     return Card(
       color: cardColor,
@@ -1306,49 +1415,50 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.25)),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.25),
+        ),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
         leading: CircleAvatar(
-          backgroundColor: isGoogleEvent ? const Color(0xFF4285F4) : AppColors.actionBlue,
+          backgroundColor: isGoogleEvent
+              ? const Color(0xFF4285F4)
+              : AppColors.actionBlue,
           foregroundColor: Colors.white,
-          child: Icon(isGoogleEvent ? Icons.cloud_outlined : Icons.calendar_today_outlined),
+          child: Icon(
+            isGoogleEvent
+                ? Icons.cloud_outlined
+                : Icons.calendar_today_outlined,
+          ),
         ),
         title: Text(
           title,
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF263746)),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF263746),
+          ),
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
             '$timeText${location.isEmpty ? '' : '\n$location'}'
-            '${isGoogleEvent ? '\n$googleCalendarName' : repeatLabel}',
+            '${isGoogleEvent
+                ? '\n$googleCalendarName'
+                : isRepeating
+                ? '\nRepeats weekly'
+                : isYearly
+                ? '\nRepeats yearly'
+                : ''}',
           ),
         ),
         isThreeLine: true,
         trailing: isGoogleEvent
-            ? PopupMenuButton<String>(
-                tooltip: 'Google event options',
-                onSelected: (value) {
-                  if (value == 'copy') _copyGoogleEventToSchedule(item);
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: 'copy',
-                    child: ListTile(
-                      leading: Icon(Icons.copy_outlined),
-                      title: Text('Copy to Trailblazer'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                ],
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Tooltip(
-                    message: 'Imported read-only · Tap to copy',
-                    child: Icon(Icons.copy_outlined, color: Color(0xFF4285F4)),
-                  ),
+            ? const Padding(
+                padding: EdgeInsets.only(right: 12),
+                child: Tooltip(
+                  message: 'Imported read-only from Google Calendar',
+                  child: Icon(Icons.lock_outline, color: Color(0xFF4285F4)),
                 ),
               )
             : PopupMenuButton<String>(
@@ -1383,7 +1493,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-
+  // Compose the screen from the date navigator, selected-day events, and
+  // To-Do section. The floating action button creates a local schedule entry.
   @override
   Widget build(BuildContext context) {
     final dayEntries = _entriesForSelectedDay();
@@ -1395,100 +1506,132 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _errorMessage != null
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_errorMessage!),
-                        const SizedBox(height: 12),
-                        ElevatedButton(onPressed: _loadSchedule, child: const Text('Try again')),
-                      ],
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_errorMessage!),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: _loadSchedule,
+                      child: const Text('Try again'),
                     ),
-                  )
-                : Column(
-                    children: [
-                      Expanded(
-                        child: ListView(
-                          padding: const EdgeInsets.only(bottom: 100),
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                  ],
+                ),
+              )
+            : Column(
+                children: [
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.only(bottom: 100),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'My Schedule',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall,
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Manage your classes, activities, and tasks.',
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
                                 children: [
-                                  Text('My Schedule', style: Theme.of(context).textTheme.headlineSmall),
-                                  const SizedBox(height: 6),
-                                  const Text('Manage your classes, activities, and tasks.'),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: OutlinedButton.icon(
-                                          onPressed: _isGoogleCalendarLoading
-                                              ? null
-                                              : (_googleAccount == null
-                                                  ? _connectGoogleCalendar
-                                                  : () => _refreshGoogleCalendar(force: true)),
-                                          icon: _isGoogleCalendarLoading
-                                              ? const SizedBox(
-                                                  width: 16,
-                                                  height: 16,
-                                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                                )
-                                              : const Icon(Icons.calendar_month_outlined),
-                                          label: Text(_googleAccount == null
-                                              ? 'Connect Google Calendar'
-                                              : 'Refresh Google Calendar'),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (_googleCalendarError != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 6),
-                                      child: Text(
-                                        _googleCalendarError!,
-                                        style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: _isGoogleCalendarLoading
+                                          ? null
+                                          : (_googleAccount == null
+                                                ? _connectGoogleCalendar
+                                                : () => _refreshGoogleCalendar(
+                                                    force: true,
+                                                  )),
+                                      icon: _isGoogleCalendarLoading
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.calendar_month_outlined,
+                                            ),
+                                      label: Text(
+                                        _googleAccount == null
+                                            ? 'Connect Google Calendar'
+                                            : 'Refresh Google Calendar',
                                       ),
                                     ),
-                                  const SizedBox(height: 8),
-                                  _buildWeekSelector(),
-                                  const SizedBox(height: 14),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        _showMonthView
-                                            ? '${_monthName(_dateForDay(_selectedDay).month)} ${_dateForDay(_selectedDay).day} activities'
-                                            : '$_selectedDay\'s activities',
-                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                                      ),
-                                      const Spacer(),
-                                      Text('${dayEntries.length} ${dayEntries.length == 1 ? 'entry' : 'entries'}',
-                                          style: Theme.of(context).textTheme.bodySmall),
-                                    ],
                                   ),
                                 ],
                               ),
-                            ),
-                            if (dayEntries.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.fromLTRB(20, 12, 20, 20),
-                                child: Text('No classes or events scheduled for this day.'),
-                              )
-                            else
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
-                                child: Column(
-                                  children: dayEntries.map(_buildEntryCard).toList(),
+                              if (_googleCalendarError != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    _googleCalendarError!,
+                                    style: TextStyle(
+                                      color: Colors.red.shade700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 ),
+                              const SizedBox(height: 8),
+                              _buildWeekSelector(),
+                              const SizedBox(height: 14),
+                              Row(
+                                children: [
+                                  Text(
+                                    _showMonthView
+                                        ? '${_monthName(_dateForDay(_selectedDay).month)} ${_dateForDay(_selectedDay).day} activities'
+                                        : '$_selectedDay\'s activities',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.bold),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    '${dayEntries.length} ${dayEntries.length == 1 ? 'entry' : 'entries'}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
+                                ],
                               ),
-                            const Divider(height: 24),
-                            _buildTodoSection(),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        if (dayEntries.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(20, 12, 20, 20),
+                            child: Text(
+                              'No classes or events scheduled for this day.',
+                            ),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Column(
+                              children: dayEntries
+                                  .map(_buildEntryCard)
+                                  .toList(),
+                            ),
+                          ),
+                        const Divider(height: 24),
+                        _buildTodoSection(),
+                      ],
+                    ),
                   ),
+                ],
+              ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.navigationNavy,
@@ -1500,5 +1643,3 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 }
-
-

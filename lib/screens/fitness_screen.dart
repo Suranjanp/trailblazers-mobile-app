@@ -13,13 +13,22 @@ import 'package:latlong2/latlong.dart';
 
 import '../services/health_connect_service.dart';
 import '../services/app_settings.dart';
+import '../services/points_service.dart';
 
+// Fitness data is stored in standard units (kilograms, kilometers, and meters).
+// The helpers below convert values only when displaying or accepting user input.
+
+/// Converts the app’s stored kilogram value into the unit selected in settings.
 double _displayWeightFromKg(double kilograms) =>
     AppSettings.instance.isMetric ? kilograms : kilograms * 2.2046226218;
 
+/// Converts a weight entered by the user back to kilograms for consistent storage.
 double _enteredWeightToKg(double displayedWeight) =>
-    AppSettings.instance.isMetric ? displayedWeight : displayedWeight / 2.2046226218;
+    AppSettings.instance.isMetric
+    ? displayedWeight
+    : displayedWeight / 2.2046226218;
 
+/// Formats a stored weight using the current unit preference and requested precision.
 String _formatWeightFromKg(double kilograms, {int decimals = 1}) {
   final value = _displayWeightFromKg(kilograms);
   final label = value == value.roundToDouble()
@@ -28,6 +37,7 @@ String _formatWeightFromKg(double kilograms, {int decimals = 1}) {
   return '$label ${AppSettings.instance.weightUnit}';
 }
 
+/// Main fitness area for workouts, health syncing, GPS activities, and training tools.
 class FitnessScreen extends StatefulWidget {
   const FitnessScreen({super.key});
 
@@ -35,7 +45,10 @@ class FitnessScreen extends StatefulWidget {
   State<FitnessScreen> createState() => _FitnessScreenState();
 }
 
+/// Holds fitness screen state and coordinates its data, timers, services, and sections.
 class _FitnessScreenState extends State<FitnessScreen> {
+  // Workout, Health Connect, GPS, and UI state are kept here because they all
+  // contribute to the fitness dashboard and its active-session controls.
   static const List<String> _workoutTypes = [
     'Walking',
     'Running',
@@ -85,6 +98,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
   int _gpsPointsSinceSave = 0;
   String? _gpsStatusMessage;
 
+/// Returns the signed-in user’s custom workout collection in Firestore.
   CollectionReference<Map<String, dynamic>> get _customWorkouts {
     final user = _user;
     if (user == null) {
@@ -96,6 +110,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
         .collection('custom_workouts');
   }
 
+/// Returns the signed-in user’s workout-session collection in Firestore.
   CollectionReference<Map<String, dynamic>> get _workouts {
     final user = _user;
     if (user == null) {
@@ -107,6 +122,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
         .collection('workout_sessions');
   }
 
+/// Returns the document that stores the user’s fitness goals and preferences.
   DocumentReference<Map<String, dynamic>> get _fitnessProfile {
     final user = _user;
     if (user == null) {
@@ -120,15 +136,23 @@ class _FitnessScreenState extends State<FitnessScreen> {
   }
 
   static const List<String> _weekdays = [
-    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
   ];
 
+/// Finds the Monday that begins the week containing the supplied date.
   DateTime _weekStart(DateTime date) {
     final day = DateTime(date.year, date.month, date.day);
     return day.subtract(Duration(days: day.weekday - 1));
   }
 
   @override
+/// Registers settings updates and restores any workout already in progress.
   void initState() {
     super.initState();
     AppSettings.instance.addListener(_onAppSettingsChanged);
@@ -136,28 +160,37 @@ class _FitnessScreenState extends State<FitnessScreen> {
     _initializeHealthConnect();
   }
 
+/// Rebuilds the screen when display units or other app settings change.
   void _onAppSettingsChanged() {
     if (mounted) setState(() {});
   }
 
+/// Formats a distance from the app’s stored kilometer value.
   String _distanceText(double kilometers, {int decimals = 2}) =>
       AppSettings.instance.formatDistanceFromKm(kilometers, decimals: decimals);
 
-  String _speedText(double kilometersPerHour, {int decimals = 1}) =>
-      AppSettings.instance.formatSpeedFromKmh(kilometersPerHour, decimals: decimals);
+/// Formats a speed from the app’s stored kilometers-per-hour value.
+  String _speedText(double kilometersPerHour, {int decimals = 1}) => AppSettings
+      .instance
+      .formatSpeedFromKmh(kilometersPerHour, decimals: decimals);
 
+/// Formats a running pace from seconds per kilometer.
   String _paceText(double secondsPerKm) =>
       AppSettings.instance.formatPaceFromSecondsPerKm(secondsPerKm);
 
-  String _elevationText(double meters, {int decimals = 0}) =>
-      AppSettings.instance.formatElevationFromMeters(meters, decimals: decimals);
+/// Formats an elevation value using the active unit preference.
+  String _elevationText(double meters, {int decimals = 0}) => AppSettings
+      .instance
+      .formatElevationFromMeters(meters, decimals: decimals);
 
+/// Checks whether Health Connect can be used and restores its connection state.
   Future<void> _initializeHealthConnect() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       if (mounted) {
         setState(() {
           _healthReady = true;
-          _healthMessage = 'Automatic health syncing is currently available on Android.';
+          _healthMessage =
+              'Automatic health syncing is currently available on Android.';
         });
       }
       return;
@@ -174,7 +207,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
         _healthAvailable = available;
         _healthConnected = hasAccess;
         _healthMessage = available
-            ? (hasAccess ? null : 'Connect Health Connect to show your real activity.')
+            ? (hasAccess
+                  ? null
+                  : 'Connect Health Connect to show your real activity.')
             : 'Install or update Health Connect to connect your activity data.';
       });
 
@@ -186,11 +221,13 @@ class _FitnessScreenState extends State<FitnessScreen> {
       setState(() {
         _healthReady = true;
         _healthAvailable = false;
-        _healthMessage = 'Health Connect could not be initialized on this device.';
+        _healthMessage =
+            'Health Connect could not be initialized on this device.';
       });
     }
   }
 
+/// Requests permission to read activity data from Health Connect.
   Future<void> _connectHealthConnect() async {
     if (_isConnectingHealth || _isRefreshingHealth) return;
     setState(() => _isConnectingHealth = true);
@@ -224,6 +261,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     }
   }
 
+/// Reads today’s health metrics and updates the summary shown on this screen.
   Future<void> _refreshHealthMetrics({bool showErrors = true}) async {
     if (_isRefreshingHealth) return;
     setState(() => _isRefreshingHealth = true);
@@ -250,8 +288,8 @@ class _FitnessScreenState extends State<FitnessScreen> {
     }
   }
 
-
   @override
+/// Removes listeners and stops timers or location streams owned by this screen.
   void dispose() {
     AppSettings.instance.removeListener(_onAppSettingsChanged);
     _ticker?.cancel();
@@ -260,9 +298,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
     super.dispose();
   }
 
+/// Loads an unfinished workout from Firestore so the user can resume it.
   Future<void> _restoreActiveWorkout() async {
     if (_user == null) {
-      if (mounted) setState(() => _loadError = 'Sign in to save and view workouts.');
+      if (mounted) {
+        setState(() => _loadError = 'Sign in to save and view workouts.');
+      }
       return;
     }
 
@@ -279,8 +320,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
       final startedAt = (data['startedAt'] as Timestamp?)?.toDate();
       if (startedAt == null) return;
       final pausedAt = (data['pausedAt'] as Timestamp?)?.toDate();
-      final totalPausedSeconds = (data['totalPausedSeconds'] as num?)?.toInt() ?? 0;
-      final currentPause = pausedAt == null ? 0 : DateTime.now().difference(pausedAt).inSeconds;
+      final totalPausedSeconds =
+          (data['totalPausedSeconds'] as num?)?.toInt() ?? 0;
+      final currentPause = pausedAt == null
+          ? 0
+          : DateTime.now().difference(pausedAt).inSeconds;
 
       setState(() {
         _activeWorkoutId = doc.id;
@@ -289,12 +333,23 @@ class _FitnessScreenState extends State<FitnessScreen> {
         _pausedAt = pausedAt;
         _totalPausedSeconds = totalPausedSeconds;
         _isWorkoutPaused = pausedAt != null;
-        _elapsedSeconds = (DateTime.now().difference(startedAt).inSeconds - totalPausedSeconds - currentPause).clamp(0, 1 << 30).toInt();
-        _gpsDistanceMeters = (data['gpsDistanceMeters'] as num?)?.toDouble() ?? 0;
-        _gpsElevationGainMeters = (data['gpsElevationGainMeters'] as num?)?.toDouble() ?? 0;
+        _elapsedSeconds =
+            (DateTime.now().difference(startedAt).inSeconds -
+                    totalPausedSeconds -
+                    currentPause)
+                .clamp(0, 1 << 30)
+                .toInt();
+        _gpsDistanceMeters =
+            (data['gpsDistanceMeters'] as num?)?.toDouble() ?? 0;
+        _gpsElevationGainMeters =
+            (data['gpsElevationGainMeters'] as num?)?.toDouble() ?? 0;
         _gpsRoutePoints
           ..clear()
-          ..addAll((data['routePoints'] as List<dynamic>? ?? const []).whereType<Map>().map((point) => Map<String, dynamic>.from(point)));
+          ..addAll(
+            (data['routePoints'] as List<dynamic>? ?? const [])
+                .whereType<Map>()
+                .map((point) => Map<String, dynamic>.from(point)),
+          );
       });
       _elapsedSecondsNotifier.value = _elapsedSeconds;
       _startTicker();
@@ -304,19 +359,28 @@ class _FitnessScreenState extends State<FitnessScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _loadError = 'Could not load your workout. Check your connection and retry.';
+          _loadError =
+              'Could not load your workout. Check your connection and retry.';
         });
       }
     }
   }
 
+/// Starts the elapsed-time ticker for the active workout.
   void _startTicker() {
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       final startedAt = _activeStartedAt;
       if (startedAt == null || !mounted) return;
-      final currentPause = _pausedAt == null ? 0 : DateTime.now().difference(_pausedAt!).inSeconds;
-      final nextElapsed = (DateTime.now().difference(startedAt).inSeconds - _totalPausedSeconds - currentPause).clamp(0, 1 << 30).toInt();
+      final currentPause = _pausedAt == null
+          ? 0
+          : DateTime.now().difference(_pausedAt!).inSeconds;
+      final nextElapsed =
+          (DateTime.now().difference(startedAt).inSeconds -
+                  _totalPausedSeconds -
+                  currentPause)
+              .clamp(0, 1 << 30)
+              .toInt();
       if (nextElapsed != _elapsedSeconds) {
         _elapsedSeconds = nextElapsed;
         // Update only the timer display; avoid rebuilding the entire fitness screen.
@@ -325,6 +389,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     });
   }
 
+/// Requests location access and begins recording a GPS-based activity.
   Future<void> _startGpsActivity(String activity) async {
     if (_gpsStarting || _activeWorkoutId != null) return;
     setState(() {
@@ -338,7 +403,8 @@ class _FitnessScreenState extends State<FitnessScreen> {
         if (mounted) {
           setState(() {
             _gpsStarting = false;
-            _gpsStatusMessage = 'Turn on device location to start GPS tracking.';
+            _gpsStatusMessage =
+                'Turn on device location to start GPS tracking.';
           });
         }
         return;
@@ -348,7 +414,8 @@ class _FitnessScreenState extends State<FitnessScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
         if (mounted) {
           setState(() {
             _gpsStarting = false;
@@ -366,12 +433,15 @@ class _FitnessScreenState extends State<FitnessScreen> {
       _lastGpsPosition = null;
       _currentGpsPosition = null;
       _gpsPointsSinceSave = 0;
-      await _startWorkout(activity, sessionData: {
-        'gpsTracking': true,
-        'activityMode': activity,
-        'gpsDistanceMeters': 0.0,
-        'routePoints': <Map<String, dynamic>>[],
-      });
+      await _startWorkout(
+        activity,
+        sessionData: {
+          'gpsTracking': true,
+          'activityMode': activity,
+          'gpsDistanceMeters': 0.0,
+          'routePoints': <Map<String, dynamic>>[],
+        },
+      );
 
       if (!mounted) return;
       if (_activeWorkoutId != null && _activeWorkout?['gpsTracking'] == true) {
@@ -389,35 +459,45 @@ class _FitnessScreenState extends State<FitnessScreen> {
     }
   }
 
+/// Subscribes to location updates while a GPS activity is running.
   Future<void> _startGpsLocationStream() async {
     if (_activeWorkout?['gpsTracking'] != true || _isWorkoutPaused) return;
     await _gpsSubscription?.cancel();
     try {
       final current = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       if (!mounted || _activeWorkoutId == null || _isWorkoutPaused) return;
       _acceptGpsPosition(current);
-      _gpsSubscription = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
-        ),
-      ).listen(
-        _acceptGpsPosition,
-        onError: (Object error) {
-          if (mounted) {
-            setState(() => _gpsStatusMessage = 'GPS signal interrupted. Check location settings.');
-          }
-        },
-      );
+      _gpsSubscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 5,
+            ),
+          ).listen(
+            _acceptGpsPosition,
+            onError: (Object error) {
+              if (mounted) {
+                setState(
+                  () => _gpsStatusMessage =
+                      'GPS signal interrupted. Check location settings.',
+                );
+              }
+            },
+          );
     } catch (_) {
       if (mounted) {
-        setState(() => _gpsStatusMessage = 'Waiting for a reliable GPS signal.');
+        setState(
+          () => _gpsStatusMessage = 'Waiting for a reliable GPS signal.',
+        );
       }
     }
   }
 
+/// Adds a valid location update and recalculates route distance and elevation.
   void _acceptGpsPosition(Position position) {
     if (!mounted || _activeWorkoutId == null || _isWorkoutPaused) return;
     if (position.accuracy > 50) return;
@@ -463,18 +543,24 @@ class _FitnessScreenState extends State<FitnessScreen> {
       _gpsPointsSinceSave = 0;
       final id = _activeWorkoutId;
       if (id != null) {
-        _workouts.doc(id).update({
-          'gpsDistanceMeters': _gpsDistanceMeters,
-          'gpsElevationGainMeters': _gpsElevationGainMeters,
-          'routePoints': _gpsRoutePoints,
-          'gpsSplits': _calculateGpsSplits(_gpsRoutePoints),
-          'updatedAt': FieldValue.serverTimestamp(),
-        }).catchError((_) {});
+        _workouts
+            .doc(id)
+            .update({
+              'gpsDistanceMeters': _gpsDistanceMeters,
+              'gpsElevationGainMeters': _gpsElevationGainMeters,
+              'routePoints': _gpsRoutePoints,
+              'gpsSplits': _calculateGpsSplits(_gpsRoutePoints),
+              'updatedAt': FieldValue.serverTimestamp(),
+            })
+            .catchError((_) {});
       }
     }
   }
 
-  List<Map<String, dynamic>> _calculateGpsSplits(List<Map<String, dynamic>> points) {
+/// Breaks a recorded route into distance splits for pace and performance summaries.
+  List<Map<String, dynamic>> _calculateGpsSplits(
+    List<Map<String, dynamic>> points,
+  ) {
     if (points.length < 2) return [];
     final splits = <Map<String, dynamic>>[];
     var cumulative = 0.0;
@@ -496,28 +582,50 @@ class _FitnessScreenState extends State<FitnessScreen> {
         splitStartTimestamp = timestamp;
         previousLatitude = latitude;
         previousLongitude = longitude;
-        previousCumulative = (point['cumulativeDistanceMeters'] as num?)?.toDouble() ?? 0;
+        previousCumulative =
+            (point['cumulativeDistanceMeters'] as num?)?.toDouble() ?? 0;
         continue;
       }
 
-      final storedCumulative = (point['cumulativeDistanceMeters'] as num?)?.toDouble();
+      final storedCumulative = (point['cumulativeDistanceMeters'] as num?)
+          ?.toDouble();
       if (storedCumulative != null && previousCumulative != null) {
         cumulative = storedCumulative;
       } else {
-        cumulative += Geolocator.distanceBetween(previousLatitude!, previousLongitude!, latitude, longitude);
+        cumulative += Geolocator.distanceBetween(
+          previousLatitude!,
+          previousLongitude!,
+          latitude,
+          longitude,
+        );
       }
 
-      final oldDistance = previousCumulative ?? (cumulative - Geolocator.distanceBetween(previousLatitude!, previousLongitude!, latitude, longitude));
+      final oldDistance =
+          previousCumulative ??
+          (cumulative -
+              Geolocator.distanceBetween(
+                previousLatitude!,
+                previousLongitude!,
+                latitude,
+                longitude,
+              ));
       final segmentDistance = cumulative - oldDistance;
       final elapsedBetween = (timestamp - previousTimestamp).clamp(0, 3600000);
       while (cumulative >= nextSplitAt && segmentDistance > 0) {
-        final fraction = ((nextSplitAt - oldDistance) / segmentDistance).clamp(0.0, 1.0);
-        final crossingTime = previousTimestamp + (elapsedBetween * fraction).round();
+        final fraction = ((nextSplitAt - oldDistance) / segmentDistance).clamp(
+          0.0,
+          1.0,
+        );
+        final crossingTime =
+            previousTimestamp + (elapsedBetween * fraction).round();
         final startTime = splitStartTimestamp ?? previousTimestamp;
         splits.add({
           'split': splits.length + 1,
           'distanceKm': 1.0,
-          'durationSeconds': ((crossingTime - startTime) / 1000).round().clamp(0, 86400),
+          'durationSeconds': ((crossingTime - startTime) / 1000).round().clamp(
+            0,
+            86400,
+          ),
         });
         splitStartTimestamp = crossingTime;
         nextSplitAt += 1000;
@@ -529,18 +637,25 @@ class _FitnessScreenState extends State<FitnessScreen> {
     }
 
     final finalTimestamp = (points.last['timestamp'] as num?)?.toInt();
-    final finalDistance = (points.last['cumulativeDistanceMeters'] as num?)?.toDouble() ?? cumulative;
+    final finalDistance =
+        (points.last['cumulativeDistanceMeters'] as num?)?.toDouble() ??
+        cumulative;
     final remainingMeters = finalDistance - ((splits.length) * 1000.0);
-    if (finalTimestamp != null && splitStartTimestamp != null && remainingMeters >= 200) {
+    if (finalTimestamp != null &&
+        splitStartTimestamp != null &&
+        remainingMeters >= 200) {
       splits.add({
         'split': splits.length + 1,
         'distanceKm': remainingMeters / 1000,
-        'durationSeconds': ((finalTimestamp - splitStartTimestamp) / 1000).round().clamp(0, 86400),
+        'durationSeconds': ((finalTimestamp - splitStartTimestamp) / 1000)
+            .round()
+            .clamp(0, 86400),
       });
     }
     return splits;
   }
 
+/// Formats the current GPS distance using the user’s preferred distance unit.
   String _formatGpsDistance() {
     final settings = AppSettings.instance;
     final kilometers = _gpsDistanceMeters / 1000;
@@ -557,7 +672,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
         : _distanceText(kilometers);
   }
 
-  Future<void> _startWorkout(String type, {Map<String, dynamic> sessionData = const {}}) async {
+/// Creates and starts a workout session, saving its initial state to Firestore.
+  Future<void> _startWorkout(
+    String type, {
+    Map<String, dynamic> sessionData = const {},
+  }) async {
     if (_isStarting || _activeWorkoutId != null) return;
     setState(() => _isStarting = true);
 
@@ -582,7 +701,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
       if (!mounted) return;
       setState(() {
         _activeWorkoutId = doc.id;
-        _activeWorkout = {'type': type, ...sessionData, 'currentExerciseIndex': 0, 'exerciseLogs': <Map<String, dynamic>>[]};
+        _activeWorkout = {
+          'type': type,
+          ...sessionData,
+          'currentExerciseIndex': 0,
+          'exerciseLogs': <Map<String, dynamic>>[],
+        };
         _activeStartedAt = startedAt;
         _elapsedSeconds = 0;
         _pausedAt = null;
@@ -598,7 +722,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
       // session is successfully created. Basic/manual workouts remain on
       // the fitness screen.
       final plannedExerciseIds = sessionData['plannedExerciseIds'];
-      if (plannedExerciseIds is List && plannedExerciseIds.isNotEmpty && mounted) {
+      if (plannedExerciseIds is List &&
+          plannedExerciseIds.isNotEmpty &&
+          mounted) {
         await _openGuidedWorkout();
       }
     } catch (_) {
@@ -608,6 +734,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     }
   }
 
+/// Stops the active workout, saves its results, and awards points when appropriate.
   Future<void> _finishWorkout() async {
     final id = _activeWorkoutId;
     final startedAt = _activeStartedAt;
@@ -616,8 +743,8 @@ class _FitnessScreenState extends State<FitnessScreen> {
     final distanceController = TextEditingController(
       text: _activeWorkout?['gpsTracking'] == true && _gpsDistanceMeters > 0
           ? AppSettings.instance
-              .displayDistanceFromKm(_gpsDistanceMeters / 1000)
-              .toStringAsFixed(3)
+                .displayDistanceFromKm(_gpsDistanceMeters / 1000)
+                .toStringAsFixed(3)
           : '',
     );
     final caloriesController = TextEditingController();
@@ -632,11 +759,15 @@ class _FitnessScreenState extends State<FitnessScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('You completed ${_formatDuration(_elapsedSeconds)} of $type.'),
+              Text(
+                'You completed ${_formatDuration(_elapsedSeconds)} of $type.',
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: distanceController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: InputDecoration(
                   labelText: 'Distance (optional)',
                   suffixText: AppSettings.instance.distanceUnit,
@@ -674,14 +805,25 @@ class _FitnessScreenState extends State<FitnessScreen> {
             onPressed: () {
               final distanceText = distanceController.text.trim();
               final caloriesText = caloriesController.text.trim();
-              final distance = distanceText.isEmpty ? null : double.tryParse(distanceText);
-              final calories = caloriesText.isEmpty ? null : int.tryParse(caloriesText);
+              final distance = distanceText.isEmpty
+                  ? null
+                  : double.tryParse(distanceText);
+              final calories = caloriesText.isEmpty
+                  ? null
+                  : int.tryParse(caloriesText);
 
               if ((distanceText.isNotEmpty &&
-                      (distance == null || !distance.isFinite || distance < 0)) ||
-                  (caloriesText.isNotEmpty && (calories == null || calories < 0))) {
+                      (distance == null ||
+                          !distance.isFinite ||
+                          distance < 0)) ||
+                  (caloriesText.isNotEmpty &&
+                      (calories == null || calories < 0))) {
                 ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(content: Text('Enter valid non-negative distance and calorie values.')),
+                  const SnackBar(
+                    content: Text(
+                      'Enter valid non-negative distance and calorie values.',
+                    ),
+                  ),
                 );
                 return;
               }
@@ -713,8 +855,20 @@ class _FitnessScreenState extends State<FitnessScreen> {
     _ticker?.cancel();
 
     final endedAt = DateTime.now();
-    final currentPause = _pausedAt == null ? 0 : endedAt.difference(_pausedAt!).inSeconds;
-    final duration = (endedAt.difference(startedAt).inSeconds - _totalPausedSeconds - currentPause).clamp(0, 1 << 30).toInt();
+    final currentPause = _pausedAt == null
+        ? 0
+        : endedAt.difference(_pausedAt!).inSeconds;
+    final duration =
+        (endedAt.difference(startedAt).inSeconds -
+                _totalPausedSeconds -
+                currentPause)
+            .clamp(0, 1 << 30)
+            .toInt();
+    final completedDistanceKm =
+        result.distanceKm ??
+        (_activeWorkout?['gpsTracking'] == true
+            ? _gpsDistanceMeters / 1000
+            : null);
 
     try {
       await _gpsSubscription?.cancel();
@@ -724,7 +878,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
         'pausedAt': null,
         'endedAt': Timestamp.fromDate(endedAt),
         'durationSeconds': duration,
-        'distanceKm': result.distanceKm ?? (_activeWorkout?['gpsTracking'] == true ? _gpsDistanceMeters / 1000 : null),
+        'distanceKm': completedDistanceKm,
         'calories': result.calories,
         if (_activeWorkout?['gpsTracking'] == true) ...{
           'gpsDistanceMeters': _gpsDistanceMeters,
@@ -735,6 +889,29 @@ class _FitnessScreenState extends State<FitnessScreen> {
         'notes': result.notes,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      // Award points only after Firestore has successfully marked this
+      // workout as completed. The workout document ID is stable, so the
+      // PointsService transaction prevents duplicate rewards.
+      PointsAwardResult? pointsResult;
+      var pointsSyncFailed = false;
+      try {
+        pointsResult = await PointsService.instance.awardActivity(
+          type: PointsActivityType.workout,
+          sourceId: id,
+          title: type,
+          metadata: <String, dynamic>{
+            'durationSeconds': duration,
+            'startedAt': Timestamp.fromDate(startedAt),
+            'endedAt': Timestamp.fromDate(endedAt),
+            'distanceKm': completedDistanceKm,
+            'workoutType': type,
+          },
+        );
+      } catch (_) {
+        // A points-service issue must never undo a completed workout.
+        pointsSyncFailed = true;
+      }
 
       if (!mounted) return;
       setState(() {
@@ -754,7 +931,18 @@ class _FitnessScreenState extends State<FitnessScreen> {
         _gpsStatusMessage = null;
       });
       _elapsedSecondsNotifier.value = _elapsedSeconds;
-      _showMessage('Workout saved.');
+
+      if (pointsSyncFailed) {
+        _showMessage(
+          'Workout saved, but points could not be synced. The reward can be retried safely.',
+        );
+      } else if (pointsResult != null && pointsResult.awarded) {
+        _showMessage(
+          'Workout saved. You earned ${pointsResult.points} points!',
+        );
+      } else {
+        _showMessage('Workout saved.');
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _isFinishing = false);
@@ -762,10 +950,13 @@ class _FitnessScreenState extends State<FitnessScreen> {
       if (_activeWorkout?['gpsTracking'] == true && !_isWorkoutPaused) {
         await _startGpsLocationStream();
       }
-      _showMessage('Workout could not be saved. Your timer and GPS tracking are still running.');
+      _showMessage(
+        'Workout could not be saved. Your timer and GPS tracking are still running.',
+      );
     }
   }
 
+/// Shows the setup sheet used to choose the activity and start a workout.
   Future<void> _showStartWorkoutSheet() async {
     if (_activeWorkoutId != null || _isStarting) return;
 
@@ -789,26 +980,45 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 12),
-                Text('GPS activities', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'GPS activities',
+                  style: Theme.of(context).textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(child: OutlinedButton.icon(
-                    onPressed: () => Navigator.pop(context, 'gps:Walking'),
-                    icon: const Icon(Icons.directions_walk), label: const Text('Walk'),
-                  )),
-                  const SizedBox(width: 8),
-                  Expanded(child: OutlinedButton.icon(
-                    onPressed: () => Navigator.pop(context, 'gps:Running'),
-                    icon: const Icon(Icons.directions_run), label: const Text('Run'),
-                  )),
-                  const SizedBox(width: 8),
-                  Expanded(child: OutlinedButton.icon(
-                    onPressed: () => Navigator.pop(context, 'gps:Cycling'),
-                    icon: const Icon(Icons.directions_bike), label: const Text('Cycle'),
-                  )),
-                ]),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.pop(context, 'gps:Walking'),
+                        icon: const Icon(Icons.directions_walk),
+                        label: const Text('Walk'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.pop(context, 'gps:Running'),
+                        icon: const Icon(Icons.directions_run),
+                        label: const Text('Run'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.pop(context, 'gps:Cycling'),
+                        icon: const Icon(Icons.directions_bike),
+                        label: const Text('Cycle'),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 14),
-                Text('Other workouts', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Other workouts',
+                  style: Theme.of(context).textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: GridView.builder(
@@ -816,11 +1026,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      childAspectRatio: 1.15,
-                    ),
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 1.15,
+                        ),
                     itemBuilder: (context, index) {
                       final type = _workoutTypes[index];
 
@@ -895,6 +1105,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     }
   }
 
+/// Converts a duration in seconds into a readable time string.
   String _formatDuration(int seconds) {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;
@@ -905,19 +1116,24 @@ class _FitnessScreenState extends State<FitnessScreen> {
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
+/// Displays a short status or error message at the bottom of the screen.
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
+/// Builds the fitness screen and places its main training sections in the page.
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final user = _user;
 
     if (user == null) {
-      return const Center(child: Text('Please sign in to use fitness tracking.'));
+      return const Center(
+        child: Text('Please sign in to use fitness tracking.'),
+      );
     }
 
     final recentWorkouts = _workouts
@@ -935,13 +1151,21 @@ class _FitnessScreenState extends State<FitnessScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('YOUR ACTIVITY', style: theme.textTheme.labelMedium?.copyWith(
-            color: colors.onSurfaceVariant,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
-          )),
+          Text(
+            'YOUR ACTIVITY',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
+          ),
           const SizedBox(height: 5),
-          Text('Fitness', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'Fitness',
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 18),
 
           if (_loadError != null) ...[
@@ -971,25 +1195,64 @@ class _FitnessScreenState extends State<FitnessScreen> {
 
           SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: 'Train', label: Text('Train'), icon: Icon(Icons.fitness_center)),
-              ButtonSegment(value: 'History', label: Text('History'), icon: Icon(Icons.history)),
+              ButtonSegment(
+                value: 'Train',
+                label: Text('Train'),
+                icon: Icon(Icons.fitness_center),
+              ),
+              ButtonSegment(
+                value: 'History',
+                label: Text('History'),
+                icon: Icon(Icons.history),
+              ),
             ],
             selected: {_fitnessTab},
             showSelectedIcon: false,
-            onSelectionChanged: (selection) => setState(() => _fitnessTab = selection.first),
+            onSelectionChanged: (selection) =>
+                setState(() => _fitnessTab = selection.first),
             expandedInsets: EdgeInsets.zero,
           ),
           const SizedBox(height: 14),
           if (_fitnessTab == 'Train') ...[
-            _buildExpandableSection(context, title: 'Personal training', subtitle: 'Goals and coaching preferences', icon: Icons.track_changes, child: _buildPersonalTrainingSection(context), initiallyExpanded: true),
-            _buildExpandableSection(context, title: 'Training programs', subtitle: 'Structured plans and progression', icon: Icons.calendar_month, child: _buildTrainingProgramsSection(context)),
-            _buildExpandableSection(context, title: 'Exercise library', subtitle: 'Browse and add exercises', icon: Icons.menu_book, child: _buildExerciseLibrarySection(context)),
-            _buildExpandableSection(context, title: 'Custom workouts', subtitle: 'Your saved routines', icon: Icons.playlist_add_check, child: _buildCustomWorkoutsSection(context)),
+            _buildExpandableSection(
+              context,
+              title: 'Personal training',
+              subtitle: 'Goals and coaching preferences',
+              icon: Icons.track_changes,
+              child: _buildPersonalTrainingSection(context),
+              initiallyExpanded: true,
+            ),
+            _buildExpandableSection(
+              context,
+              title: 'Training programs',
+              subtitle: 'Structured plans and progression',
+              icon: Icons.calendar_month,
+              child: _buildTrainingProgramsSection(context),
+            ),
+            _buildExpandableSection(
+              context,
+              title: 'Exercise library',
+              subtitle: 'Browse and add exercises',
+              icon: Icons.menu_book,
+              child: _buildExerciseLibrarySection(context),
+            ),
+            _buildExpandableSection(
+              context,
+              title: 'Custom workouts',
+              subtitle: 'Your saved routines',
+              icon: Icons.playlist_add_check,
+              child: _buildCustomWorkoutsSection(context),
+            ),
           ] else ...[
             Row(
               children: [
                 Expanded(
-                  child: Text('Workout history', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  child: Text(
+                    'Workout history',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 OutlinedButton.icon(
                   onPressed: _showTrainingCoachOverlay,
@@ -1003,15 +1266,22 @@ class _FitnessScreenState extends State<FitnessScreen> {
               stream: recentWorkouts.snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return const Card(child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('Could not load workout history. Check your Firestore rules and connection.'),
-                  ));
+                  return const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'Could not load workout history. Check your Firestore rules and connection.',
+                      ),
+                    ),
+                  );
                 }
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: Padding(
-                    padding: EdgeInsets.all(24), child: CircularProgressIndicator(),
-                  ));
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
                 }
                 final docs = snapshot.data?.docs ?? [];
                 final now = DateTime.now();
@@ -1019,38 +1289,102 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 final today = docs.where((doc) {
                   final data = doc.data();
                   final started = data['startedAt'];
-                  final date = started is Timestamp ? started.toDate() : started is DateTime ? started : null;
-                  return data['status'] == 'completed' && date != null && !date.isBefore(todayStart) && date.isBefore(todayStart.add(const Duration(days: 1)));
+                  final date = started is Timestamp
+                      ? started.toDate()
+                      : started is DateTime
+                      ? started
+                      : null;
+                  return data['status'] == 'completed' &&
+                      date != null &&
+                      !date.isBefore(todayStart) &&
+                      date.isBefore(todayStart.add(const Duration(days: 1)));
                 }).toList();
-                final totalSeconds = today.fold<int>(0, (sum, doc) => sum + ((doc.data()['durationSeconds'] as num?)?.toInt() ?? 0));
-                final totalDistance = today.fold<double>(0, (sum, doc) => sum + ((doc.data()['distanceKm'] as num?)?.toDouble() ?? 0));
+                final totalSeconds = today.fold<int>(
+                  0,
+                  (sum, doc) =>
+                      sum +
+                      ((doc.data()['durationSeconds'] as num?)?.toInt() ?? 0),
+                );
+                final totalDistance = today.fold<double>(
+                  0,
+                  (sum, doc) =>
+                      sum +
+                      ((doc.data()['distanceKm'] as num?)?.toDouble() ?? 0),
+                );
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Today's workouts", style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    Text(
+                      "Today's workouts",
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 8),
-                    Row(children: [
-                      Expanded(child: _summaryCard(context, Icons.fitness_center, 'Sessions', '${today.length}')),
-                      const SizedBox(width: 8),
-                      Expanded(child: _summaryCard(context, Icons.timer_outlined, 'Time', _formatDuration(totalSeconds))),
-                      const SizedBox(width: 8),
-                      Expanded(child: _summaryCard(context, Icons.route_outlined, 'Distance', _distanceText(totalDistance, decimals: 1))),
-                    ]),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _summaryCard(
+                            context,
+                            Icons.fitness_center,
+                            'Sessions',
+                            '${today.length}',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _summaryCard(
+                            context,
+                            Icons.timer_outlined,
+                            'Time',
+                            _formatDuration(totalSeconds),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _summaryCard(
+                            context,
+                            Icons.route_outlined,
+                            'Distance',
+                            _distanceText(totalDistance, decimals: 1),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     Card(
                       elevation: 0,
                       color: colors.surfaceContainerLow,
                       child: ExpansionTile(
-                        key: const PageStorageKey<String>('fitness_today_sessions'),
+                        key: const PageStorageKey<String>(
+                          'fitness_today_sessions',
+                        ),
                         leading: const Icon(Icons.list_alt),
-                        title: Text(today.isEmpty ? 'Today’s session details' : 'View today’s sessions'),
-                        subtitle: Text(today.isEmpty ? 'No completed workouts yet' : '${today.length} completed session${today.length == 1 ? '' : 's'}'),
+                        title: Text(
+                          today.isEmpty
+                              ? 'Today’s session details'
+                              : 'View today’s sessions',
+                        ),
+                        subtitle: Text(
+                          today.isEmpty
+                              ? 'No completed workouts yet'
+                              : '${today.length} completed session${today.length == 1 ? '' : 's'}',
+                        ),
                         children: today.isEmpty
-                            ? const [Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Text('Completed workouts will appear here.'),
-                              )]
-                            : today.take(10).map((doc) => _workoutTile(context, doc.data())).toList(),
+                            ? const [
+                                Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Text(
+                                    'Completed workouts will appear here.',
+                                  ),
+                                ),
+                              ]
+                            : today
+                                  .take(10)
+                                  .map(
+                                    (doc) => _workoutTile(context, doc.data()),
+                                  )
+                                  .toList(),
                       ),
                     ),
                   ],
@@ -1058,22 +1392,52 @@ class _FitnessScreenState extends State<FitnessScreen> {
               },
             ),
             const SizedBox(height: 18),
-            _buildExpandableSection(context, title: 'GPS routes', subtitle: 'Recorded routes and activity details', icon: Icons.route, child: _buildGpsRouteHistorySection(context)),
+            _buildExpandableSection(
+              context,
+              title: 'GPS routes',
+              subtitle: 'Recorded routes and activity details',
+              icon: Icons.route,
+              child: _buildGpsRouteHistorySection(context),
+            ),
             const SizedBox(height: 18),
-            _buildExpandableSection(context, title: 'GPS goals & stats', subtitle: 'Weekly distance and activity targets', icon: Icons.flag_outlined, child: _buildGpsGoalsAndStatsSection(context)),
+            _buildExpandableSection(
+              context,
+              title: 'GPS goals & stats',
+              subtitle: 'Weekly distance and activity targets',
+              icon: Icons.flag_outlined,
+              child: _buildGpsGoalsAndStatsSection(context),
+            ),
             const SizedBox(height: 18),
-            _buildExpandableSection(context, title: 'Training insights', subtitle: 'Workout patterns and coaching insights', icon: Icons.insights, child: _buildTrainingInsightsSection(context)),
+            _buildExpandableSection(
+              context,
+              title: 'Training insights',
+              subtitle: 'Workout patterns and coaching insights',
+              icon: Icons.insights,
+              child: _buildTrainingInsightsSection(context),
+            ),
             const SizedBox(height: 18),
-            _buildExpandableSection(context, title: 'Personal records', subtitle: 'Best lifts and exercise milestones', icon: Icons.emoji_events_outlined, child: _buildPersonalRecordsSection(context)),
+            _buildExpandableSection(
+              context,
+              title: 'Personal records',
+              subtitle: 'Best lifts and exercise milestones',
+              icon: Icons.emoji_events_outlined,
+              child: _buildPersonalRecordsSection(context),
+            ),
             const SizedBox(height: 18),
-            _buildExpandableSection(context, title: 'Performance trends', subtitle: 'Track strength and workout progress', icon: Icons.trending_up, child: _buildPerformanceTrendsSection(context)),
+            _buildExpandableSection(
+              context,
+              title: 'Performance trends',
+              subtitle: 'Track strength and workout progress',
+              icon: Icons.trending_up,
+              child: _buildPerformanceTrendsSection(context),
+            ),
           ],
-
         ],
       ),
     );
   }
 
+/// Creates a reusable collapsible section to keep longer screens organized.
   Widget _buildExpandableSection(
     BuildContext context, {
     required String title,
@@ -1092,7 +1456,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
       child: ExpansionTile(
         key: PageStorageKey<String>('fitness_history_section_$title'),
         leading: Icon(icon, color: colors.primary),
-        title: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        title: Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.bold),
+        ),
         subtitle: Text(subtitle),
         initiallyExpanded: initiallyExpanded,
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1102,10 +1470,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Shows Health Connect availability, connection status, and today’s synced metrics.
   Widget _buildHealthConnectCard(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final supported = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final supported =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     final progress = (_todaySteps ?? 0) / 10000;
     final clampedProgress = progress.clamp(0.0, 1.0).toDouble();
 
@@ -1120,12 +1490,18 @@ class _FitnessScreenState extends State<FitnessScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.health_and_safety_outlined, color: colors.primary, size: 25),
+                Icon(
+                  Icons.health_and_safety_outlined,
+                  color: colors.primary,
+                  size: 25,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Daily health data',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 if (_healthConnected)
@@ -1137,7 +1513,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
               supported
                   ? 'Read your steps and walking distance from Android Health Connect.'
                   : 'Automatic health syncing is not configured for this platform yet.',
-              style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
             ),
             if (_healthConnected && _todaySteps != null) ...[
               const SizedBox(height: 18),
@@ -1175,29 +1553,41 @@ class _FitnessScreenState extends State<FitnessScreen> {
               const SizedBox(height: 6),
               Text(
                 '${(clampedProgress * 100).round()}% of a 10,000-step reference goal',
-                style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
               ),
               if (_healthLastUpdated != null) ...[
                 const SizedBox(height: 8),
                 Text(
                   'Updated ${DateFormat('h:mm a').format(_healthLastUpdated!)}',
-                  style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
                 ),
               ],
             ] else if (_healthMessage != null) ...[
               const SizedBox(height: 12),
               Text(
                 _healthMessage!,
-                style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
               ),
             ],
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: !supported || !_healthReady || _isConnectingHealth || _isRefreshingHealth
+                onPressed:
+                    !supported ||
+                        !_healthReady ||
+                        _isConnectingHealth ||
+                        _isRefreshingHealth
                     ? null
-                    : (_healthConnected ? _refreshHealthMetrics : _connectHealthConnect),
+                    : (_healthConnected
+                          ? _refreshHealthMetrics
+                          : _connectHealthConnect),
                 icon: (_isConnectingHealth || _isRefreshingHealth)
                     ? const SizedBox(
                         width: 16,
@@ -1209,16 +1599,19 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   !_healthReady
                       ? 'Checking availability...'
                       : _isConnectingHealth
-                          ? 'Connecting...'
-                          : _isRefreshingHealth
-                              ? 'Refreshing...'
-                              : _healthConnected
-                                  ? 'Refresh health data'
-                                  : 'Connect Health Connect',
+                      ? 'Connecting...'
+                      : _isRefreshingHealth
+                      ? 'Refreshing...'
+                      : _healthConnected
+                      ? 'Refresh health data'
+                      : 'Connect Health Connect',
                 ),
               ),
             ),
-            if (supported && _healthReady && !_healthAvailable && !_healthConnected) ...[
+            if (supported &&
+                _healthReady &&
+                !_healthAvailable &&
+                !_healthConnected) ...[
               const SizedBox(height: 4),
               Center(
                 child: TextButton(
@@ -1228,7 +1621,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
                           try {
                             await _healthService.installOrUpdateHealthConnect();
                           } catch (_) {
-                            _showMessage('Could not open the Health Connect installation page.');
+                            _showMessage(
+                              'Could not open the Health Connect installation page.',
+                            );
                           }
                         },
                   child: const Text('Install or update Health Connect'),
@@ -1241,6 +1636,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Builds one compact metric display for the Health Connect summary.
   Widget _healthMetric(
     BuildContext context, {
     required IconData icon,
@@ -1254,76 +1650,25 @@ class _FitnessScreenState extends State<FitnessScreen> {
       children: [
         Icon(icon, color: colors.primary, size: 21),
         const SizedBox(height: 6),
-        Text(value, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-        Text(label, style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
+        Text(
+          value,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildGpsActivityCard(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Card(
-      elevation: 0,
-      color: colors.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.gps_fixed, color: colors.primary),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Text('GPS activity tracking', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                ),
-                const Text('LIVE GPS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text('Track your route and distance for outdoor activities.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(child: _gpsActivityButton(context, 'Walking', Icons.directions_walk)),
-                const SizedBox(width: 8),
-                Expanded(child: _gpsActivityButton(context, 'Running', Icons.directions_run)),
-                const SizedBox(width: 8),
-                Expanded(child: _gpsActivityButton(context, 'Cycling', Icons.directions_bike)),
-              ],
-            ),
-            if (_gpsStarting) ...[
-              const SizedBox(height: 12),
-              const LinearProgressIndicator(),
-              const SizedBox(height: 5),
-              const Text('Preparing GPS activity…', style: TextStyle(fontSize: 12)),
-            ],
-            if (_gpsStatusMessage != null) ...[
-              const SizedBox(height: 10),
-              Text(_gpsStatusMessage!, style: TextStyle(color: colors.error, fontSize: 12)),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _gpsActivityButton(BuildContext context, String activity, IconData icon) {
-    return FilledButton.tonal(
-      onPressed: _gpsStarting || _isStarting ? null : () => _startGpsActivity(activity),
-      style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4)),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 21),
-          const SizedBox(height: 4),
-          Text(activity, style: const TextStyle(fontSize: 11)),
-        ],
-      ),
-    );
-  }
 
+/// Displays the controls for starting a new workout or guided session.
   Widget _buildStartWorkoutCard(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Card(
@@ -1335,22 +1680,35 @@ class _FitnessScreenState extends State<FitnessScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.play_circle_fill_rounded, size: 34, color: colors.onPrimaryContainer),
-            const SizedBox(height: 12),
-            Text('Ready to move?', style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            Icon(
+              Icons.play_circle_fill_rounded,
+              size: 34,
               color: colors.onPrimaryContainer,
-              fontWeight: FontWeight.bold,
-            )),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Ready to move?',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: colors.onPrimaryContainer,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 5),
-            Text('Start a workout and track your time, distance, and notes.',
-              style: TextStyle(color: colors.onPrimaryContainer)),
+            Text(
+              'Start a workout and track your time, distance, and notes.',
+              style: TextStyle(color: colors.onPrimaryContainer),
+            ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: _isStarting ? null : _showStartWorkoutSheet,
                 icon: _isStarting
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.play_arrow),
                 label: Text(_isStarting ? 'Starting...' : 'Start a workout'),
                 style: FilledButton.styleFrom(
@@ -1366,13 +1724,15 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Pauses or resumes the active workout and persists the timing state.
   Future<void> _setWorkoutPaused(bool pause) async {
     final id = _activeWorkoutId;
     if (id == null || pause == _isWorkoutPaused) return;
     final now = DateTime.now();
     final nextTotal = pause
         ? _totalPausedSeconds
-        : _totalPausedSeconds + (_pausedAt == null ? 0 : now.difference(_pausedAt!).inSeconds);
+        : _totalPausedSeconds +
+              (_pausedAt == null ? 0 : now.difference(_pausedAt!).inSeconds);
     try {
       await _workouts.doc(id).update({
         'pausedAt': pause ? Timestamp.fromDate(now) : null,
@@ -1387,9 +1747,16 @@ class _FitnessScreenState extends State<FitnessScreen> {
         final startedAt = _activeStartedAt;
         if (startedAt != null) {
           final currentPause = pause ? now.difference(now).inSeconds : 0;
-          _elapsedSeconds = (now.difference(startedAt).inSeconds - nextTotal - currentPause).clamp(0, 1 << 30).toInt();
+          _elapsedSeconds =
+              (now.difference(startedAt).inSeconds - nextTotal - currentPause)
+                  .clamp(0, 1 << 30)
+                  .toInt();
         }
-        _activeWorkout = {...?_activeWorkout, 'pausedAt': pause ? Timestamp.fromDate(now) : null, 'totalPausedSeconds': nextTotal};
+        _activeWorkout = {
+          ...?_activeWorkout,
+          'pausedAt': pause ? Timestamp.fromDate(now) : null,
+          'totalPausedSeconds': nextTotal,
+        };
       });
       _elapsedSecondsNotifier.value = _elapsedSeconds;
       if (_activeWorkout?['gpsTracking'] == true) {
@@ -1406,36 +1773,49 @@ class _FitnessScreenState extends State<FitnessScreen> {
     }
   }
 
+/// Opens the guided workout flow with the selected exercises and current session.
   Future<void> _openGuidedWorkout() async {
     final id = _activeWorkoutId;
     final data = _activeWorkout;
     if (id == null || data == null) return;
-    final ids = (data['plannedExerciseIds'] as List<dynamic>? ?? const []).cast<String>();
+    final ids = (data['plannedExerciseIds'] as List<dynamic>? ?? const [])
+        .cast<String>();
     final exercises = ids
-        .map((exerciseId) => _exerciseLibrary.where((item) => item.id == exerciseId).firstOrNull)
+        .map(
+          (exerciseId) => _exerciseLibrary
+              .where((item) => item.id == exerciseId)
+              .firstOrNull,
+        )
         .whereType<_Exercise>()
         .toList();
     if (exercises.isEmpty) {
-      _showMessage('This session has no planned exercises. Start a program or custom workout to use guided training.');
+      _showMessage(
+        'This session has no planned exercises. Start a program or custom workout to use guided training.',
+      );
       return;
     }
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => _GuidedWorkoutScreen(
-        exercises: exercises,
-        session: _workouts.doc(id),
-        initialIndex: (data['currentExerciseIndex'] as num?)?.toInt() ?? 0,
-        initialLogs: (data['exerciseLogs'] as List<dynamic>? ?? const [])
-            .map((entry) => Map<String, dynamic>.from(entry as Map))
-            .toList(),
-        isPaused: _isWorkoutPaused,
-        onPauseChanged: _setWorkoutPaused,
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _GuidedWorkoutScreen(
+          exercises: exercises,
+          session: _workouts.doc(id),
+          initialIndex: (data['currentExerciseIndex'] as num?)?.toInt() ?? 0,
+          initialLogs: (data['exerciseLogs'] as List<dynamic>? ?? const [])
+              .map((entry) => Map<String, dynamic>.from(entry as Map))
+              .toList(),
+          isPaused: _isWorkoutPaused,
+          onPauseChanged: _setWorkoutPaused,
+        ),
       ),
-    ));
+    );
     if (!mounted) return;
     final refreshed = await _workouts.doc(id).get();
-    if (refreshed.exists && mounted) setState(() => _activeWorkout = refreshed.data());
+    if (refreshed.exists && mounted) {
+      setState(() => _activeWorkout = refreshed.data());
+    }
   }
 
+/// Displays the active workout timer and controls while a session is underway.
   Widget _buildActiveWorkoutCard(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final type = (_activeWorkout?['type'] as String?) ?? 'Workout';
@@ -1451,13 +1831,26 @@ class _FitnessScreenState extends State<FitnessScreen> {
           children: [
             Row(
               children: [
-                Icon(_iconFor(type), color: colors.onSecondaryContainer, size: 27),
-                const SizedBox(width: 10),
-                Expanded(child: Text('$displayName in progress', style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                Icon(
+                  _iconFor(type),
                   color: colors.onSecondaryContainer,
-                  fontWeight: FontWeight.bold,
-                ))),
-                const Icon(Icons.fiber_manual_record, color: Colors.red, size: 12),
+                  size: 27,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '$displayName in progress',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: colors.onSecondaryContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.fiber_manual_record,
+                  color: Colors.red,
+                  size: 12,
+                ),
               ],
             ),
             const SizedBox(height: 18),
@@ -1483,12 +1876,40 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 children: [
                   Icon(Icons.route, color: colors.onSecondaryContainer),
                   const SizedBox(width: 8),
-                  Text(_formatGpsDistance(), style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: colors.onSecondaryContainer, fontWeight: FontWeight.bold)),
+                  Text(
+                    _formatGpsDistance(),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: colors.onSecondaryContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
-              Center(child: Text(_isWorkoutPaused ? 'GPS paused' : (_currentGpsPosition == null ? 'Acquiring GPS signal…' : 'GPS tracking active'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onSecondaryContainer))),
-              Center(child: Text('Elevation gain  ${_elevationText(_gpsElevationGainMeters)}', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colors.onSecondaryContainer))),
-              if (_gpsStatusMessage != null) Center(child: Text(_gpsStatusMessage!, style: TextStyle(color: colors.error, fontSize: 12))),
+              Center(
+                child: Text(
+                  _isWorkoutPaused
+                      ? 'GPS paused'
+                      : (_currentGpsPosition == null
+                            ? 'Acquiring GPS signal…'
+                            : 'GPS tracking active'),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: colors.onSecondaryContainer),
+                ),
+              ),
+              Center(
+                child: Text(
+                  'Elevation gain  ${_elevationText(_gpsElevationGainMeters)}',
+                  style: Theme.of(context).textTheme.labelMedium
+                      ?.copyWith(color: colors.onSecondaryContainer),
+                ),
+              ),
+              if (_gpsStatusMessage != null)
+                Center(
+                  child: Text(
+                    _gpsStatusMessage!,
+                    style: TextStyle(color: colors.error, fontSize: 12),
+                  ),
+                ),
               const SizedBox(height: 14),
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
@@ -1503,7 +1924,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
                             children: [
                               const Icon(Icons.location_searching, size: 30),
                               const SizedBox(height: 8),
-                              Text(_isWorkoutPaused ? 'GPS tracking is paused' : 'Waiting for GPS location…'),
+                              Text(
+                                _isWorkoutPaused
+                                    ? 'GPS tracking is paused'
+                                    : 'Waiting for GPS location…',
+                              ),
                             ],
                           ),
                         )
@@ -1518,7 +1943,10 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 valueListenable: _elapsedSecondsNotifier,
                 builder: (context, elapsed, child) {
                   final distanceKm = _gpsDistanceMeters / 1000;
-                  final isCycling = (_activeWorkout?['activityMode'] as String? ?? '').toLowerCase() == 'cycling';
+                  final isCycling =
+                      (_activeWorkout?['activityMode'] as String? ?? '')
+                          .toLowerCase() ==
+                      'cycling';
                   String metricValue;
                   String metricLabel;
                   if (distanceKm < 0.05 || elapsed <= 0) {
@@ -1535,9 +1963,23 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   }
                   return Row(
                     children: [
-                      Expanded(child: _summaryCard(context, Icons.timer_outlined, 'Elapsed', _formatDuration(elapsed))),
+                      Expanded(
+                        child: _summaryCard(
+                          context,
+                          Icons.timer_outlined,
+                          'Elapsed',
+                          _formatDuration(elapsed),
+                        ),
+                      ),
                       const SizedBox(width: 8),
-                      Expanded(child: _summaryCard(context, isCycling ? Icons.speed : Icons.av_timer, metricLabel, metricValue)),
+                      Expanded(
+                        child: _summaryCard(
+                          context,
+                          isCycling ? Icons.speed : Icons.av_timer,
+                          metricLabel,
+                          metricValue,
+                        ),
+                      ),
                     ],
                   );
                 },
@@ -1548,14 +1990,22 @@ class _FitnessScreenState extends State<FitnessScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _isFinishing ? null : () => _setWorkoutPaused(!_isWorkoutPaused),
+                  onPressed: _isFinishing
+                      ? null
+                      : () => _setWorkoutPaused(!_isWorkoutPaused),
                   icon: Icon(_isWorkoutPaused ? Icons.play_arrow : Icons.pause),
-                  label: Text(_isWorkoutPaused ? 'Resume GPS activity' : 'Pause GPS activity'),
+                  label: Text(
+                    _isWorkoutPaused
+                        ? 'Resume GPS activity'
+                        : 'Pause GPS activity',
+                  ),
                 ),
               ),
             ],
             const SizedBox(height: 18),
-            if ((_activeWorkout?['plannedExerciseIds'] as List<dynamic>?)?.isNotEmpty ?? false) ...[
+            if ((_activeWorkout?['plannedExerciseIds'] as List<dynamic>?)
+                    ?.isNotEmpty ??
+                false) ...[
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
@@ -1580,7 +2030,13 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
-  Widget _summaryCard(BuildContext context, IconData icon, String title, String value) {
+/// Builds a small reusable card for a fitness statistic or summary value.
+  Widget _summaryCard(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String value,
+  ) {
     final colors = Theme.of(context).colorScheme;
     return Card(
       elevation: 0,
@@ -1591,15 +2047,24 @@ class _FitnessScreenState extends State<FitnessScreen> {
           children: [
             Icon(icon, color: colors.primary),
             const SizedBox(height: 7),
-            Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 3),
-            Text(title, style: Theme.of(context).textTheme.labelSmall, textAlign: TextAlign.center),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.labelSmall,
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
     );
   }
 
+/// Displays a saved workout entry with its key details and available actions.
   Widget _workoutTile(BuildContext context, Map<String, dynamic> data) {
     final type = (data['type'] as String?) ?? 'Workout';
     final startedAt = (data['startedAt'] as Timestamp?)?.toDate();
@@ -1619,17 +2084,22 @@ class _FitnessScreenState extends State<FitnessScreen> {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-          child: Icon(_iconFor(type), color: Theme.of(context).colorScheme.onPrimaryContainer),
+          child: Icon(
+            _iconFor(type),
+            color: Theme.of(context).colorScheme.onPrimaryContainer,
+          ),
         ),
         title: Text(type, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('${startedAt == null ? '' : DateFormat('MMM d · h:mm a').format(startedAt)}\n$details'),
+        subtitle: Text(
+          '${startedAt == null ? '' : DateFormat('MMM d · h:mm a').format(startedAt)}\n$details',
+        ),
         isThreeLine: true,
         trailing: const Icon(Icons.check_circle_outline),
       ),
     );
   }
 
-
+/// Builds the personal training area, including workout history and training tools.
   Widget _buildPersonalTrainingSection(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -1638,18 +2108,26 @@ class _FitnessScreenState extends State<FitnessScreen> {
       stream: _fitnessProfile.snapshots(),
       builder: (context, profileSnapshot) {
         final profile = profileSnapshot.data?.data() ?? <String, dynamic>{};
-        final workoutGoal = (profile['weeklyWorkoutGoal'] as num?)?.toInt() ?? 3;
-        final minuteGoal = (profile['weeklyMinutesGoal'] as num?)?.toInt() ?? 150;
+        final workoutGoal =
+            (profile['weeklyWorkoutGoal'] as num?)?.toInt() ?? 3;
+        final minuteGoal =
+            (profile['weeklyMinutesGoal'] as num?)?.toInt() ?? 150;
         final stepGoal = (profile['dailyStepsGoal'] as num?)?.toInt() ?? 10000;
-        final days = (profile['trainingDays'] as List<dynamic>?)
-                ?.map((value) => value.toString()).toSet() ??
+        final days =
+            (profile['trainingDays'] as List<dynamic>?)
+                ?.map((value) => value.toString())
+                .toSet() ??
             <String>{'Mon', 'Wed', 'Fri'};
         final focus = profile['trainingFocus'] as String? ?? 'Strength';
         final today = _weekdays[DateTime.now().weekday - 1];
         final isTrainingDay = days.contains(today);
         final weeklyQuery = _workouts
-            .where('startedAt',
-                isGreaterThanOrEqualTo: Timestamp.fromDate(_weekStart(DateTime.now())))
+            .where(
+              'startedAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(
+                _weekStart(DateTime.now()),
+              ),
+            )
             .orderBy('startedAt', descending: true)
             .limit(100);
 
@@ -1662,18 +2140,26 @@ class _FitnessScreenState extends State<FitnessScreen> {
             final sessions = completed.length;
             final minutes = completed.fold<int>(
               0,
-              (total, doc) => total +
-                  (((doc.data()['durationSeconds'] as num?)?.toInt() ?? 0) ~/ 60),
+              (total, doc) =>
+                  total +
+                  (((doc.data()['durationSeconds'] as num?)?.toInt() ?? 0) ~/
+                      60),
             );
-            final sessionProgress =
-                (sessions / workoutGoal).clamp(0.0, 1.0).toDouble();
-            final minuteProgress =
-                (minutes / minuteGoal).clamp(0.0, 1.0).toDouble();
+            final sessionProgress = (sessions / workoutGoal)
+                .clamp(0.0, 1.0)
+                .toDouble();
+            final minuteProgress = (minutes / minuteGoal)
+                .clamp(0.0, 1.0)
+                .toDouble();
             final stepsProgress = _todaySteps == null
                 ? null
                 : (_todaySteps! / stepGoal).clamp(0.0, 1.0).toDouble();
             final suggestedPlan = _trainingPlans
-                .where((plan) => plan.level == _selectedTrainingLevel && plan.category == focus)
+                .where(
+                  (plan) =>
+                      plan.level == _selectedTrainingLevel &&
+                      plan.category == focus,
+                )
                 .firstOrNull;
 
             return Column(
@@ -1682,8 +2168,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text('Personal training',
-                          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      child: Text(
+                        'Personal training',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     TextButton.icon(
                       onPressed: () => _editFitnessProfile(profile),
@@ -1692,8 +2182,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     ),
                   ],
                 ),
-                Text('Your targets, weekly plan, and training recommendations.',
-                    style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+                Text(
+                  'Your targets, weekly plan, and training recommendations.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Card(
                   elevation: 0,
@@ -1706,8 +2200,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
                         Row(
                           children: [
                             Expanded(
-                              child: Text('Weekly progress',
-                                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                              child: Text(
+                                'Weekly progress',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                             Text('$sessions / $workoutGoal workouts'),
                           ],
@@ -1731,9 +2229,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
                             const Icon(Icons.directions_walk, size: 18),
                             const SizedBox(width: 8),
                             const Expanded(child: Text('Today’s steps')),
-                            Text(_todaySteps == null
-                                ? 'Health Connect not connected'
-                                : '$_todaySteps / $stepGoal'),
+                            Text(
+                              _todaySteps == null
+                                  ? 'Health Connect not connected'
+                                  : '$_todaySteps / $stepGoal',
+                            ),
                           ],
                         ),
                         if (stepsProgress != null) ...[
@@ -1758,8 +2258,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
                             const Icon(Icons.calendar_month_outlined),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text('Weekly schedule',
-                                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                              child: Text(
+                                'Weekly schedule',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                             TextButton(
                               onPressed: () => _editFitnessProfile(profile),
@@ -1774,15 +2278,24 @@ class _FitnessScreenState extends State<FitnessScreen> {
                           children: _weekdays.map((day) {
                             final selected = days.contains(day);
                             return Chip(
-                              avatar: Icon(selected ? Icons.fitness_center : Icons.remove, size: 15),
+                              avatar: Icon(
+                                selected ? Icons.fitness_center : Icons.remove,
+                                size: 15,
+                              ),
                               label: Text(day),
-                              backgroundColor: selected ? colors.primaryContainer : colors.surface,
+                              backgroundColor: selected
+                                  ? colors.primaryContainer
+                                  : colors.surface,
                             );
                           }).toList(),
                         ),
                         const SizedBox(height: 6),
-                        Text('Focus: $focus · Level: $_selectedTrainingLevel',
-                            style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+                        Text(
+                          'Focus: $focus · Level: $_selectedTrainingLevel',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1797,46 +2310,70 @@ class _FitnessScreenState extends State<FitnessScreen> {
                         ? Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Weekly workout goal reached',
-                                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                              Text(
+                                'Weekly workout goal reached',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               const SizedBox(height: 5),
-                              const Text('You have met your workout target. Prioritize recovery or gentle movement.'),
+                              const Text(
+                                'You have met your workout target. Prioritize recovery or gentle movement.',
+                              ),
                             ],
                           )
                         : isTrainingDay && suggestedPlan != null
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.auto_awesome),
-                                      const SizedBox(width: 8),
-                                      Text('Today’s recommendation',
-                                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                                    ],
+                                  const Icon(Icons.auto_awesome),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Today’s recommendation',
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.bold),
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(suggestedPlan.name,
-                                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                                  Text('${suggestedPlan.durationMinutes} min · ${suggestedPlan.category}'),
-                                  const SizedBox(height: 10),
-                                  FilledButton.tonal(
-                                    onPressed: () => _showPlanDetails(suggestedPlan),
-                                    child: const Text('View recommended workout'),
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(isTrainingDay ? 'Keep your training consistent' : 'Recovery day',
-                                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 5),
-                                  Text(isTrainingDay
-                                      ? 'Choose a suitable session from your training programs when you are ready.'
-                                      : 'Today is not a scheduled training day. Rest or choose gentle mobility if it feels good.'),
                                 ],
                               ),
+                              const SizedBox(height: 6),
+                              Text(
+                                suggestedPlan.name,
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                '${suggestedPlan.durationMinutes} min · ${suggestedPlan.category}',
+                              ),
+                              const SizedBox(height: 10),
+                              FilledButton.tonal(
+                                onPressed: () =>
+                                    _showPlanDetails(suggestedPlan),
+                                child: const Text('View recommended workout'),
+                              ),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isTrainingDay
+                                    ? 'Keep your training consistent'
+                                    : 'Recovery day',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                isTrainingDay
+                                    ? 'Choose a suitable session from your training programs when you are ready.'
+                                    : 'Today is not a scheduled training day. Rest or choose gentle mobility if it feels good.',
+                              ),
+                            ],
+                          ),
                   ),
                 ),
                 if (profileSnapshot.hasError || workoutSnapshot.hasError)
@@ -1844,7 +2381,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       'Personal training data could not be loaded. Check your connection and Firestore rules.',
-                      style: theme.textTheme.bodySmall?.copyWith(color: colors.error),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.error,
+                      ),
                     ),
                   ),
               ],
@@ -1855,6 +2394,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Displays saved GPS activities and lets the user inspect recorded routes.
   Widget _buildGpsRouteHistorySection(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -1869,26 +2409,37 @@ class _FitnessScreenState extends State<FitnessScreen> {
           return Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('GPS route history could not be loaded: ${snapshot.error}'),
+              child: Text(
+                'GPS route history could not be loaded: ${snapshot.error}',
+              ),
             ),
           );
         }
-        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-          return const Center(child: Padding(
-            padding: EdgeInsets.all(18),
-            child: CircularProgressIndicator(),
-          ));
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(18),
+              child: CircularProgressIndicator(),
+            ),
+          );
         }
 
-        final sessions = (snapshot.data?.docs ?? []).map((doc) => <String, dynamic>{
-          ...doc.data(),
-          '_documentId': doc.id,
-        }).where((data) {
-          return data['gpsTracking'] == true && data['status'] == 'completed';
-        }).toList();
+        final sessions = (snapshot.data?.docs ?? [])
+            .map(
+              (doc) => <String, dynamic>{...doc.data(), '_documentId': doc.id},
+            )
+            .where((data) {
+              return data['gpsTracking'] == true &&
+                  data['status'] == 'completed';
+            })
+            .toList();
         final filtered = sessions.where((data) {
           if (_gpsHistoryFilter == 'All') return true;
-          return (data['activityMode'] as String? ?? data['type'] as String? ?? '') == _gpsHistoryFilter;
+          return (data['activityMode'] as String? ??
+                  data['type'] as String? ??
+                  '') ==
+              _gpsHistoryFilter;
         }).toList();
 
         double distanceOf(Map<String, dynamic> data) {
@@ -1900,11 +2451,20 @@ class _FitnessScreenState extends State<FitnessScreen> {
         int durationOf(Map<String, dynamic> data) =>
             (data['durationSeconds'] as num?)?.toInt() ?? 0;
 
-
-        final walking = sessions.where((d) => (d['activityMode'] as String? ?? '') == 'Walking').toList();
-        final running = sessions.where((d) => (d['activityMode'] as String? ?? '') == 'Running').toList();
-        final cycling = sessions.where((d) => (d['activityMode'] as String? ?? '') == 'Cycling').toList();
-        double bestDistance(List<Map<String, dynamic>> items) => items.fold<double>(0, (best, d) => distanceOf(d) > best ? distanceOf(d) : best);
+        final walking = sessions
+            .where((d) => (d['activityMode'] as String? ?? '') == 'Walking')
+            .toList();
+        final running = sessions
+            .where((d) => (d['activityMode'] as String? ?? '') == 'Running')
+            .toList();
+        final cycling = sessions
+            .where((d) => (d['activityMode'] as String? ?? '') == 'Cycling')
+            .toList();
+        double bestDistance(List<Map<String, dynamic>> items) =>
+            items.fold<double>(
+              0,
+              (best, d) => distanceOf(d) > best ? distanceOf(d) : best,
+            );
         double bestRunPace = double.infinity;
         for (final data in running) {
           final km = distanceOf(data);
@@ -1931,27 +2491,43 @@ class _FitnessScreenState extends State<FitnessScreen> {
 
         String dateLabel(Map<String, dynamic> data) {
           final raw = data['startedAt'];
-          final date = raw is Timestamp ? raw.toDate() : raw is DateTime ? raw : null;
-          return date == null ? 'Date unavailable' : DateFormat('EEE, MMM d · h:mm a').format(date);
+          final date = raw is Timestamp
+              ? raw.toDate()
+              : raw is DateTime
+              ? raw
+              : null;
+          return date == null
+              ? 'Date unavailable'
+              : DateFormat('EEE, MMM d · h:mm a').format(date);
         }
 
         List<Map<String, dynamic>> pointsOf(Map<String, dynamic> data) {
           final raw = data['routePoints'];
           if (raw is! List) return [];
-          return raw.whereType<Map>().map((point) => Map<String, dynamic>.from(point)).where((point) {
-            return point['latitude'] is num && point['longitude'] is num;
-          }).toList();
+          return raw
+              .whereType<Map>()
+              .map((point) => Map<String, dynamic>.from(point))
+              .where((point) {
+                return point['latitude'] is num && point['longitude'] is num;
+              })
+              .toList();
         }
 
         List<Map<String, dynamic>> splitsOf(Map<String, dynamic> data) {
           final raw = data['gpsSplits'];
           if (raw is List) {
-            return raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+            return raw
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList();
           }
           return _calculateGpsSplits(pointsOf(data));
         }
 
-        double elevationGainOf(Map<String, dynamic> data, List<Map<String, dynamic>> points) {
+        double elevationGainOf(
+          Map<String, dynamic> data,
+          List<Map<String, dynamic>> points,
+        ) {
           final saved = (data['gpsElevationGainMeters'] as num?)?.toDouble();
           if (saved != null) return saved;
           var gain = 0.0;
@@ -1971,15 +2547,32 @@ class _FitnessScreenState extends State<FitnessScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('GPS activity & routes', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'GPS activity & routes',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text('Saved walks, runs, and rides', style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+            Text(
+              'Saved walks, runs, and rides',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 12),
             if (sessions.isNotEmpty) ...[
-              Text('GPS personal bests', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              Text(
+                'GPS personal bests',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 8),
               GridView.count(
-                key: const PageStorageKey<String>('fitness_gps_route_personal_bests_grid'),
+                key: const PageStorageKey<String>(
+                  'fitness_gps_route_personal_bests_grid',
+                ),
                 crossAxisCount: 2,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -1987,10 +2580,34 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 crossAxisSpacing: 8,
                 childAspectRatio: 1.6,
                 children: [
-                  _summaryCard(context, Icons.route, 'Longest walk', bestDistance(walking) > 0 ? _distanceText(bestDistance(walking)) : '—'),
-                  _summaryCard(context, Icons.directions_run, 'Longest run', bestDistance(running) > 0 ? _distanceText(bestDistance(running)) : '—'),
-                  _summaryCard(context, Icons.speed, 'Best run pace', paceLabel(bestRunPace)),
-                  _summaryCard(context, Icons.directions_bike, 'Top cycling speed', bestCycleSpeed > 0 ? _speedText(bestCycleSpeed) : '—'),
+                  _summaryCard(
+                    context,
+                    Icons.route,
+                    'Longest walk',
+                    bestDistance(walking) > 0
+                        ? _distanceText(bestDistance(walking))
+                        : '—',
+                  ),
+                  _summaryCard(
+                    context,
+                    Icons.directions_run,
+                    'Longest run',
+                    bestDistance(running) > 0
+                        ? _distanceText(bestDistance(running))
+                        : '—',
+                  ),
+                  _summaryCard(
+                    context,
+                    Icons.speed,
+                    'Best run pace',
+                    paceLabel(bestRunPace),
+                  ),
+                  _summaryCard(
+                    context,
+                    Icons.directions_bike,
+                    'Top cycling speed',
+                    bestCycleSpeed > 0 ? _speedText(bestCycleSpeed) : '—',
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -2004,7 +2621,8 @@ class _FitnessScreenState extends State<FitnessScreen> {
               ],
               selected: {_gpsHistoryFilter},
               showSelectedIcon: false,
-              onSelectionChanged: (selection) => setState(() => _gpsHistoryFilter = selection.first),
+              onSelectionChanged: (selection) =>
+                  setState(() => _gpsHistoryFilter = selection.first),
               expandedInsets: EdgeInsets.zero,
             ),
             const SizedBox(height: 10),
@@ -2015,28 +2633,36 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(18),
                   child: Center(
-                    child: Text(sessions.isEmpty
-                        ? 'Complete a GPS walk, run, or ride and your route will appear here.'
-                        : 'No ${_gpsHistoryFilter.toLowerCase()} activities yet.'),
+                    child: Text(
+                      sessions.isEmpty
+                          ? 'Complete a GPS walk, run, or ride and your route will appear here.'
+                          : 'No ${_gpsHistoryFilter.toLowerCase()} activities yet.',
+                    ),
                   ),
                 ),
               )
             else
               ...filtered.map((data) {
-                final activity = data['activityMode'] as String? ?? data['type'] as String? ?? 'GPS activity';
+                final activity =
+                    data['activityMode'] as String? ??
+                    data['type'] as String? ??
+                    'GPS activity';
                 final km = distanceOf(data);
                 final seconds = durationOf(data);
                 final points = pointsOf(data);
                 final splits = splitsOf(data);
                 final elevationGain = elevationGainOf(data, points);
                 final pace = km > 0 && seconds > 0 ? seconds / km : null;
-                final speed = km > 0 && seconds > 0 ? km / (seconds / 3600) : null;
+                final speed = km > 0 && seconds > 0
+                    ? km / (seconds / 3600)
+                    : null;
                 final icon = activity == 'Running'
                     ? Icons.directions_run
                     : activity == 'Cycling'
-                        ? Icons.directions_bike
-                        : Icons.directions_walk;
-                final routeId = data['_documentId'] as String? ??
+                    ? Icons.directions_bike
+                    : Icons.directions_walk;
+                final routeId =
+                    data['_documentId'] as String? ??
                     '${activity}_${dateLabel(data)}_${km}_$seconds';
                 return Card(
                   elevation: 0,
@@ -2049,8 +2675,13 @@ class _FitnessScreenState extends State<FitnessScreen> {
                       backgroundColor: colors.primaryContainer,
                       child: Icon(icon, color: colors.onPrimaryContainer),
                     ),
-                    title: Text(activity, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('${dateLabel(data)}\n${_distanceText(km)} · ${_formatDuration(seconds)}'),
+                    title: Text(
+                      activity,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '${dateLabel(data)}\n${_distanceText(km)} · ${_formatDuration(seconds)}',
+                    ),
                     childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
                     children: [
                       if (points.length >= 2) ...[
@@ -2070,55 +2701,122 @@ class _FitnessScreenState extends State<FitnessScreen> {
                         const SizedBox(height: 6),
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: Text('Street map · drag to pan and pinch to zoom', style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
+                          child: Text(
+                            'Street map · drag to pan and pinch to zoom',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 12),
                       ] else ...[
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(color: colors.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
-                          child: const Text('Route points were not saved for this activity.'),
+                          decoration: BoxDecoration(
+                            color: colors.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'Route points were not saved for this activity.',
+                          ),
                         ),
                         const SizedBox(height: 12),
                       ],
                       Row(
                         children: [
-                          Expanded(child: _summaryCard(context, Icons.route, 'Distance', _distanceText(km))),
+                          Expanded(
+                            child: _summaryCard(
+                              context,
+                              Icons.route,
+                              'Distance',
+                              _distanceText(km),
+                            ),
+                          ),
                           const SizedBox(width: 8),
-                          Expanded(child: _summaryCard(context, Icons.timer_outlined, 'Duration', _formatDuration(seconds))),
+                          Expanded(
+                            child: _summaryCard(
+                              context,
+                              Icons.timer_outlined,
+                              'Duration',
+                              _formatDuration(seconds),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Expanded(child: _summaryCard(context, Icons.terrain, 'Elevation gain', _elevationText(elevationGain))),
+                          Expanded(
+                            child: _summaryCard(
+                              context,
+                              Icons.terrain,
+                              'Elevation gain',
+                              _elevationText(elevationGain),
+                            ),
+                          ),
                           const SizedBox(width: 8),
-                          Expanded(child: _summaryCard(context, Icons.place_outlined, 'GPS points', '${points.length}')),
+                          Expanded(
+                            child: _summaryCard(
+                              context,
+                              Icons.place_outlined,
+                              'GPS points',
+                              '${points.length}',
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
                           if (activity == 'Running' && pace != null)
-                            Expanded(child: _summaryCard(context, Icons.speed, 'Average pace', paceLabel(pace)))
+                            Expanded(
+                              child: _summaryCard(
+                                context,
+                                Icons.speed,
+                                'Average pace',
+                                paceLabel(pace),
+                              ),
+                            )
                           else if (activity == 'Cycling' && speed != null)
-                            Expanded(child: _summaryCard(context, Icons.speed, 'Average speed', _speedText(speed)))
+                            Expanded(
+                              child: _summaryCard(
+                                context,
+                                Icons.speed,
+                                'Average speed',
+                                _speedText(speed),
+                              ),
+                            )
                           else
-                            Expanded(child: _summaryCard(context, Icons.timer, 'Average pace', pace == null ? '—' : paceLabel(pace))),
+                            Expanded(
+                              child: _summaryCard(
+                                context,
+                                Icons.timer,
+                                'Average pace',
+                                pace == null ? '—' : paceLabel(pace),
+                              ),
+                            ),
                         ],
                       ),
                       if (splits.isNotEmpty) ...[
                         const SizedBox(height: 14),
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: Text('Automatic distance splits', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                          child: Text(
+                            'Automatic distance splits',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 6),
                         ...splits.map((split) {
-                          final splitNumber = (split['split'] as num?)?.toInt() ?? 0;
-                          final splitDistance = (split['distanceKm'] as num?)?.toDouble() ?? 1.0;
-                          final splitSeconds = (split['durationSeconds'] as num?)?.toInt() ?? 0;
+                          final splitNumber =
+                              (split['split'] as num?)?.toInt() ?? 0;
+                          final splitDistance =
+                              (split['distanceKm'] as num?)?.toDouble() ?? 1.0;
+                          final splitSeconds =
+                              (split['durationSeconds'] as num?)?.toInt() ?? 0;
                           final paceText = splitDistance > 0
                               ? paceLabel(splitSeconds / splitDistance)
                               : '—';
@@ -2126,10 +2824,21 @@ class _FitnessScreenState extends State<FitnessScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 5),
                             child: Row(
                               children: [
-                                Expanded(child: Text(splitDistance < 0.999 ? 'Final partial split' : 'Split $splitNumber')),
+                                Expanded(
+                                  child: Text(
+                                    splitDistance < 0.999
+                                        ? 'Final partial split'
+                                        : 'Split $splitNumber',
+                                  ),
+                                ),
                                 Text(_distanceText(splitDistance)),
                                 const SizedBox(width: 16),
-                                Text(paceText, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                Text(
+                                  paceText,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ],
                             ),
                           );
@@ -2142,7 +2851,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
             if (sessions.length >= 100)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text('Showing your 100 most recent workout sessions.', style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
+                child: Text(
+                  'Showing your 100 most recent workout sessions.',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
               ),
           ],
         );
@@ -2150,6 +2864,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Shows GPS activity goals, progress, and aggregated performance statistics.
   Widget _buildGpsGoalsAndStatsSection(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -2163,51 +2878,91 @@ class _FitnessScreenState extends State<FitnessScreen> {
       stream: _fitnessProfile.snapshots(),
       builder: (context, profileSnapshot) {
         final profile = profileSnapshot.data?.data() ?? <String, dynamic>{};
-        final distanceGoal = (profile['gpsWeeklyDistanceGoalKm'] as num?)?.toDouble() ?? 15.0;
-        final sessionGoal = (profile['gpsWeeklySessionGoal'] as num?)?.toInt() ?? 3;
-        final targetActivity = profile['gpsGoalActivity'] as String? ?? 'All activities';
+        final distanceGoal =
+            (profile['gpsWeeklyDistanceGoalKm'] as num?)?.toDouble() ?? 15.0;
+        final sessionGoal =
+            (profile['gpsWeeklySessionGoal'] as num?)?.toInt() ?? 3;
+        final targetActivity =
+            profile['gpsGoalActivity'] as String? ?? 'All activities';
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: weeklyQuery.snapshots(),
           builder: (context, workoutSnapshot) {
             if (workoutSnapshot.hasError) {
-              return Card(child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text('GPS statistics could not be loaded: ${workoutSnapshot.error}'),
-              ));
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'GPS statistics could not be loaded: ${workoutSnapshot.error}',
+                  ),
+                ),
+              );
             }
-            final sessions = (workoutSnapshot.data?.docs ?? []).map((doc) => doc.data()).where((data) {
-              if (data['gpsTracking'] != true || data['status'] != 'completed') return false;
-              if (targetActivity == 'All activities') return true;
-              return (data['activityMode'] as String? ?? '') == targetActivity;
-            }).toList();
+            final sessions = (workoutSnapshot.data?.docs ?? [])
+                .map((doc) => doc.data())
+                .where((data) {
+                  if (data['gpsTracking'] != true ||
+                      data['status'] != 'completed') {
+                    return false;
+                  }
+                  if (targetActivity == 'All activities') return true;
+                  return (data['activityMode'] as String? ?? '') ==
+                      targetActivity;
+                })
+                .toList();
 
             double distanceOf(Map<String, dynamic> data) {
               final stored = (data['distanceKm'] as num?)?.toDouble();
               if (stored != null && stored > 0) return stored;
-              return ((data['gpsDistanceMeters'] as num?)?.toDouble() ?? 0) / 1000;
+              return ((data['gpsDistanceMeters'] as num?)?.toDouble() ?? 0) /
+                  1000;
             }
+
             int durationOf(Map<String, dynamic> data) =>
                 (data['durationSeconds'] as num?)?.toInt() ?? 0;
 
-            final totalDistance = sessions.fold<double>(0, (sum, data) => sum + distanceOf(data));
-            final totalSeconds = sessions.fold<int>(0, (sum, data) => sum + durationOf(data));
-            final distanceProgress = (totalDistance / distanceGoal).clamp(0.0, 1.0).toDouble();
-            final sessionProgress = (sessions.length / sessionGoal).clamp(0.0, 1.0).toDouble();
-            final avgPace = totalDistance > 0 ? totalSeconds / totalDistance : 0.0;
-            final avgSpeed = totalSeconds > 0 ? totalDistance / (totalSeconds / 3600) : 0.0;
+            final totalDistance = sessions.fold<double>(
+              0,
+              (sum, data) => sum + distanceOf(data),
+            );
+            final totalSeconds = sessions.fold<int>(
+              0,
+              (sum, data) => sum + durationOf(data),
+            );
+            final distanceProgress = (totalDistance / distanceGoal)
+                .clamp(0.0, 1.0)
+                .toDouble();
+            final sessionProgress = (sessions.length / sessionGoal)
+                .clamp(0.0, 1.0)
+                .toDouble();
+            final avgPace = totalDistance > 0
+                ? totalSeconds / totalDistance
+                : 0.0;
+            final avgSpeed = totalSeconds > 0
+                ? totalDistance / (totalSeconds / 3600)
+                : 0.0;
             String paceText(double value) {
               if (value <= 0 || !value.isFinite) return '—';
               return _paceText(value);
             }
-            final activityLabel = targetActivity == 'All activities' ? 'All GPS activities' : targetActivity;
+
+            final activityLabel = targetActivity == 'All activities'
+                ? 'All GPS activities'
+                : targetActivity;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Expanded(child: Text('GPS goals & weekly stats', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold))),
+                    Expanded(
+                      child: Text(
+                        'GPS goals & weekly stats',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                     TextButton.icon(
                       onPressed: () => _editGpsGoals(profile),
                       icon: const Icon(Icons.tune, size: 17),
@@ -2215,7 +2970,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     ),
                   ],
                 ),
-                Text('Rolling 7-day progress · $activityLabel', style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+                Text(
+                  'Rolling 7-day progress · $activityLabel',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Card(
                   elevation: 0,
@@ -2225,24 +2985,58 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(children: [
-                          Expanded(child: Text('Distance goal', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600))),
-                          Text('${_distanceText(totalDistance, decimals: 1)} / ${_distanceText(distanceGoal, decimals: 0)}', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
-                        ]),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Distance goal',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${_distanceText(totalDistance, decimals: 1)} / ${_distanceText(distanceGoal, decimals: 0)}',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 8),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-                          child: LinearProgressIndicator(value: distanceProgress, minHeight: 9),
+                          child: LinearProgressIndicator(
+                            value: distanceProgress,
+                            minHeight: 9,
+                          ),
                         ),
                         const SizedBox(height: 16),
-                        Row(children: [
-                          Expanded(child: Text('Activity goal', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600))),
-                          Text('${sessions.length} / $sessionGoal sessions', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
-                        ]),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Activity goal',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${sessions.length} / $sessionGoal sessions',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 8),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-                          child: LinearProgressIndicator(value: sessionProgress, minHeight: 9),
+                          child: LinearProgressIndicator(
+                            value: sessionProgress,
+                            minHeight: 9,
+                          ),
                         ),
                       ],
                     ),
@@ -2250,7 +3044,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 ),
                 const SizedBox(height: 8),
                 GridView.count(
-                  key: const PageStorageKey<String>('fitness_gps_goals_stats_grid'),
+                  key: const PageStorageKey<String>(
+                    'fitness_gps_goals_stats_grid',
+                  ),
                   crossAxisCount: 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -2258,23 +3054,50 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   crossAxisSpacing: 8,
                   childAspectRatio: 1.6,
                   children: [
-                    _summaryCard(context, Icons.route_outlined, 'Distance', _distanceText(totalDistance)),
-                    _summaryCard(context, Icons.flag_outlined, 'Activities', '${sessions.length}'),
-                    _summaryCard(context, Icons.timer_outlined, 'Active time', _formatDuration(totalSeconds)),
+                    _summaryCard(
+                      context,
+                      Icons.route_outlined,
+                      'Distance',
+                      _distanceText(totalDistance),
+                    ),
+                    _summaryCard(
+                      context,
+                      Icons.flag_outlined,
+                      'Activities',
+                      '${sessions.length}',
+                    ),
+                    _summaryCard(
+                      context,
+                      Icons.timer_outlined,
+                      'Active time',
+                      _formatDuration(totalSeconds),
+                    ),
                     _summaryCard(
                       context,
                       Icons.speed,
-                      targetActivity == 'Cycling' ? 'Average speed' : 'Average pace',
+                      targetActivity == 'Cycling'
+                          ? 'Average speed'
+                          : 'Average pace',
                       targetActivity == 'Cycling'
                           ? (avgSpeed > 0 ? _speedText(avgSpeed) : '—')
-                          : (targetActivity == 'Running' || targetActivity == 'Walking' ? paceText(avgPace) : (avgSpeed > 0 ? _speedText(avgSpeed) : '—')),
+                          : (targetActivity == 'Running' ||
+                                    targetActivity == 'Walking'
+                                ? paceText(avgPace)
+                                : (avgSpeed > 0 ? _speedText(avgSpeed) : '—')),
                     ),
                   ],
                 ),
-                if (workoutSnapshot.connectionState == ConnectionState.waiting && !workoutSnapshot.hasData)
+                if (workoutSnapshot.connectionState ==
+                        ConnectionState.waiting &&
+                    !workoutSnapshot.hasData)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text('Loading recent GPS activity…', style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
+                    child: Text(
+                      'Loading recent GPS activity…',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                   ),
               ],
             );
@@ -2284,11 +3107,16 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Opens the editor for distance, activity, or other GPS training targets.
   Future<void> _editGpsGoals(Map<String, dynamic> current) async {
-    double distanceGoal = (current['gpsWeeklyDistanceGoalKm'] as num?)?.toDouble() ?? 15.0;
-    double distanceGoalDisplay = AppSettings.instance.displayDistanceFromKm(distanceGoal);
+    double distanceGoal =
+        (current['gpsWeeklyDistanceGoalKm'] as num?)?.toDouble() ?? 15.0;
+    double distanceGoalDisplay = AppSettings.instance.displayDistanceFromKm(
+      distanceGoal,
+    );
     int sessionGoal = (current['gpsWeeklySessionGoal'] as num?)?.toInt() ?? 3;
-    String targetActivity = current['gpsGoalActivity'] as String? ?? 'All activities';
+    String targetActivity =
+        current['gpsGoalActivity'] as String? ?? 'All activities';
     final save = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -2300,48 +3128,90 @@ class _FitnessScreenState extends State<FitnessScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Track progress for', style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  'Track progress for',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
                 DropdownButtonFormField<String>(
-                  value: targetActivity,
-                  items: const ['All activities', 'Walking', 'Running', 'Cycling']
-                      .map((value) => DropdownMenuItem(value: value, child: Text(value)))
-                      .toList(),
-                  onChanged: (value) { if (value != null) setDialogState(() => targetActivity = value); },
+                  initialValue: targetActivity,
+                  items:
+                      const ['All activities', 'Walking', 'Running', 'Cycling']
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value),
+                            ),
+                          )
+                          .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => targetActivity = value);
+                    }
+                  },
                 ),
                 const SizedBox(height: 14),
-                Text('Weekly distance target', style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  'Weekly distance target',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
                 DropdownButtonFormField<double>(
-                  value: distanceGoalDisplay,
+                  initialValue: distanceGoalDisplay,
                   items: const [5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0]
-                      .map((value) => DropdownMenuItem(
-                            value: AppSettings.instance.displayDistanceFromKm(value),
-                            child: Text('${AppSettings.instance.displayDistanceFromKm(value).toStringAsFixed(0)} ${AppSettings.instance.distanceUnit}'),
-                          ))
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: AppSettings.instance.displayDistanceFromKm(
+                            value,
+                          ),
+                          child: Text(
+                            '${AppSettings.instance.displayDistanceFromKm(value).toStringAsFixed(0)} ${AppSettings.instance.distanceUnit}',
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
                       setDialogState(() {
                         distanceGoalDisplay = value;
-                        distanceGoal = AppSettings.instance.enteredDistanceToKm(value);
+                        distanceGoal = AppSettings.instance.enteredDistanceToKm(
+                          value,
+                        );
                       });
                     }
                   },
                 ),
                 const SizedBox(height: 14),
-                Text('Activities per 7 days', style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  'Activities per 7 days',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
                 DropdownButtonFormField<int>(
-                  value: sessionGoal,
+                  initialValue: sessionGoal,
                   items: List.generate(7, (index) => index + 1)
-                      .map((value) => DropdownMenuItem(value: value, child: Text('$value activities')))
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text('$value activities'),
+                        ),
+                      )
                       .toList(),
-                  onChanged: (value) { if (value != null) setDialogState(() => sessionGoal = value); },
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => sessionGoal = value);
+                    }
+                  },
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Save goals')),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Save goals'),
+            ),
           ],
         ),
       ),
@@ -2356,10 +3226,15 @@ class _FitnessScreenState extends State<FitnessScreen> {
       }, SetOptions(merge: true));
       if (mounted) _showMessage('GPS activity goals saved.');
     } catch (_) {
-      if (mounted) _showMessage('GPS goals could not be saved. Check Firestore rules and connection.');
+      if (mounted) {
+        _showMessage(
+          'GPS goals could not be saved. Check Firestore rules and connection.',
+        );
+      }
     }
   }
 
+/// Displays personal records collected from completed strength workouts.
   Widget _buildPersonalRecordsSection(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -2374,8 +3249,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
             : <String, dynamic>{};
         final entries = records.entries.toList();
         entries.sort((a, b) {
-          final aData = a.value is Map ? Map<String, dynamic>.from(a.value as Map) : <String, dynamic>{};
-          final bData = b.value is Map ? Map<String, dynamic>.from(b.value as Map) : <String, dynamic>{};
+          final aData = a.value is Map
+              ? Map<String, dynamic>.from(a.value as Map)
+              : <String, dynamic>{};
+          final bData = b.value is Map
+              ? Map<String, dynamic>.from(b.value as Map)
+              : <String, dynamic>{};
           final aDate = aData['updatedAt'] is Timestamp
               ? (aData['updatedAt'] as Timestamp).toDate()
               : DateTime.fromMillisecondsSinceEpoch(0);
@@ -2400,16 +3279,20 @@ class _FitnessScreenState extends State<FitnessScreen> {
         final milestone = recordCount >= 10
             ? 'Record collector · 10+ personal records'
             : recordCount >= 5
-                ? 'Building momentum · 5+ personal records'
-                : recordCount >= 1
-                    ? 'First record earned · Keep progressing'
-                    : 'Your first record is waiting';
+            ? 'Building momentum · 5+ personal records'
+            : recordCount >= 1
+            ? 'First record earned · Keep progressing'
+            : 'Your first record is waiting';
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Progress & personal records',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'Progress & personal records',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 10),
             Card(
               elevation: 0,
@@ -2421,26 +3304,41 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.emoji_events_outlined, color: colors.primary),
+                        Icon(
+                          Icons.emoji_events_outlined,
+                          color: colors.primary,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text('$recordCount personal ${recordCount == 1 ? 'record' : 'records'}',
-                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                          child: Text(
+                            '$recordCount personal ${recordCount == 1 ? 'record' : 'records'}',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 5),
-                    Text(milestone, style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+                    Text(
+                      milestone,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                     if (recordCount == 0) ...[
                       const SizedBox(height: 12),
-                      const Text('Complete sets in a guided workout to start tracking your best performances.'),
+                      const Text(
+                        'Complete sets in a guided workout to start tracking your best performances.',
+                      ),
                     ] else ...[
                       const SizedBox(height: 12),
                       ...entries.take(6).map((entry) {
                         final record = entry.value is Map
                             ? Map<String, dynamic>.from(entry.value as Map)
                             : <String, dynamic>{};
-                        final name = record['exerciseName'] as String? ?? entry.key;
+                        final name =
+                            record['exerciseName'] as String? ?? entry.key;
                         final updatedAt = record['updatedAt'] is Timestamp
                             ? (record['updatedAt'] as Timestamp).toDate()
                             : null;
@@ -2449,20 +3347,46 @@ class _FitnessScreenState extends State<FitnessScreen> {
                           dense: true,
                           leading: CircleAvatar(
                             backgroundColor: colors.primaryContainer,
-                            child: Icon(Icons.trending_up, color: colors.onPrimaryContainer, size: 19),
+                            child: Icon(
+                              Icons.trending_up,
+                              color: colors.onPrimaryContainer,
+                              size: 19,
+                            ),
                           ),
-                          title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                          subtitle: Text(updatedAt == null ? 'Personal best' : 'Updated ${DateFormat('MMM d').format(updatedAt)}'),
-                          trailing: Text(recordValue(record), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
+                          title: Text(
+                            name,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Text(
+                            updatedAt == null
+                                ? 'Personal best'
+                                : 'Updated ${DateFormat('MMM d').format(updatedAt)}',
+                          ),
+                          trailing: Text(
+                            recordValue(record),
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         );
                       }),
                       if (recordCount > 6)
-                        Text('+ ${recordCount - 6} more records', style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+                        Text(
+                          '+ ${recordCount - 6} more records',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
                     ],
                     if (snapshot.hasError)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
-                        child: Text('Personal records could not be loaded.', style: theme.textTheme.bodySmall?.copyWith(color: colors.error)),
+                        child: Text(
+                          'Personal records could not be loaded.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.error,
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -2474,13 +3398,16 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Lets the user update fitness profile details and training preferences.
   Future<void> _editFitnessProfile(Map<String, dynamic> current) async {
     int workoutGoal = (current['weeklyWorkoutGoal'] as num?)?.toInt() ?? 3;
     int minuteGoal = (current['weeklyMinutesGoal'] as num?)?.toInt() ?? 150;
     int stepGoal = (current['dailyStepsGoal'] as num?)?.toInt() ?? 10000;
     String focus = current['trainingFocus'] as String? ?? 'Strength';
-    final days = (current['trainingDays'] as List<dynamic>?)
-            ?.map((value) => value.toString()).toSet() ??
+    final days =
+        (current['trainingDays'] as List<dynamic>?)
+            ?.map((value) => value.toString())
+            .toSet() ??
         <String>{'Mon', 'Wed', 'Fri'};
 
     final save = await showDialog<bool>(
@@ -2495,72 +3422,148 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Workouts per week', style: Theme.of(context).textTheme.labelLarge),
+                  Text(
+                    'Workouts per week',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
                   DropdownButtonFormField<int>(
-                    value: workoutGoal,
+                    initialValue: workoutGoal,
                     items: List.generate(7, (index) => index + 1)
-                        .map((value) => DropdownMenuItem(value: value, child: Text('$value workouts')))
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text('$value workouts'),
+                          ),
+                        )
                         .toList(),
-                    onChanged: (value) { if (value != null) setDialogState(() => workoutGoal = value); },
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => workoutGoal = value);
+                      }
+                    },
                   ),
                   const SizedBox(height: 12),
-                  Text('Active minutes per week', style: Theme.of(context).textTheme.labelLarge),
+                  Text(
+                    'Active minutes per week',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
                   DropdownButtonFormField<int>(
-                    value: minuteGoal,
+                    initialValue: minuteGoal,
                     items: const [60, 90, 120, 150, 180, 210, 240, 300]
-                        .map((value) => DropdownMenuItem(value: value, child: Text('$value minutes')))
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text('$value minutes'),
+                          ),
+                        )
                         .toList(),
-                    onChanged: (value) { if (value != null) setDialogState(() => minuteGoal = value); },
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => minuteGoal = value);
+                      }
+                    },
                   ),
                   const SizedBox(height: 12),
-                  Text('Daily step target', style: Theme.of(context).textTheme.labelLarge),
+                  Text(
+                    'Daily step target',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
                   DropdownButtonFormField<int>(
-                    value: stepGoal,
-                    items: const [4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 15000]
-                        .map((value) => DropdownMenuItem(
-                              value: value,
-                              child: Text(NumberFormat('#,###').format(value)),
-                            ))
-                        .toList(),
-                    onChanged: (value) { if (value != null) setDialogState(() => stepGoal = value); },
+                    initialValue: stepGoal,
+                    items:
+                        const [
+                              4000,
+                              5000,
+                              6000,
+                              7000,
+                              8000,
+                              9000,
+                              10000,
+                              11000,
+                              12000,
+                              15000,
+                            ]
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(
+                                  NumberFormat('#,###').format(value),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: (value) {
+                      if (value != null) setDialogState(() => stepGoal = value);
+                    },
                   ),
                   const SizedBox(height: 12),
-                  Text('Training focus', style: Theme.of(context).textTheme.labelLarge),
+                  Text(
+                    'Training focus',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
                   DropdownButtonFormField<String>(
-                    value: focus,
-                    items: const ['Strength', 'Cardio', 'Mobility', 'Conditioning']
-                        .map((value) => DropdownMenuItem(value: value, child: Text(value)))
-                        .toList(),
-                    onChanged: (value) { if (value != null) setDialogState(() => focus = value); },
+                    initialValue: focus,
+                    items:
+                        const ['Strength', 'Cardio', 'Mobility', 'Conditioning']
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: (value) {
+                      if (value != null) setDialogState(() => focus = value);
+                    },
                   ),
                   const SizedBox(height: 16),
-                  Text('Training days', style: Theme.of(context).textTheme.labelLarge),
+                  Text(
+                    'Training days',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    children: _weekdays.map((day) => FilterChip(
-                      label: Text(day),
-                      selected: days.contains(day),
-                      onSelected: (selected) => setDialogState(() {
-                        if (selected) { days.add(day); } else { days.remove(day); }
-                      }),
-                    )).toList(),
+                    children: _weekdays
+                        .map(
+                          (day) => FilterChip(
+                            label: Text(day),
+                            selected: days.contains(day),
+                            onSelected: (selected) => setDialogState(() {
+                              if (selected) {
+                                days.add(day);
+                              } else {
+                                days.remove(day);
+                              }
+                            }),
+                          ),
+                        )
+                        .toList(),
                   ),
                   if (days.isEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Text('Choose at least one training day.',
-                          style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      child: Text(
+                        'Choose at least one training day.',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
                     ),
                 ],
               ),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
             FilledButton(
-              onPressed: days.isEmpty ? null : () => Navigator.pop(dialogContext, true),
+              onPressed: days.isEmpty
+                  ? null
+                  : () => Navigator.pop(dialogContext, true),
               child: const Text('Save goals'),
             ),
           ],
@@ -2580,10 +3583,15 @@ class _FitnessScreenState extends State<FitnessScreen> {
       }, SetOptions(merge: true));
       if (mounted) _showMessage('Personal training goals saved.');
     } catch (_) {
-      if (mounted) _showMessage('Goals could not be saved. Check Firestore rules and connection.');
+      if (mounted) {
+        _showMessage(
+          'Goals could not be saved. Check Firestore rules and connection.',
+        );
+      }
     }
   }
 
+/// Summarizes workout patterns and provides insights based on saved activity.
   Widget _buildTrainingInsightsSection(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -2633,23 +3641,27 @@ class _FitnessScreenState extends State<FitnessScreen> {
 
         final current = sessions.where((data) {
           final date = sessionDate(data);
-          return date != null && !date.isBefore(currentStart) && !date.isAfter(now);
+          return date != null &&
+              !date.isBefore(currentStart) &&
+              !date.isAfter(now);
         }).toList();
         final previous = sessions.where((data) {
           final date = sessionDate(data);
-          return date != null && !date.isBefore(previousStart) && date.isBefore(currentStart);
+          return date != null &&
+              !date.isBefore(previousStart) &&
+              date.isBefore(currentStart);
         }).toList();
 
         int minutes(List<Map<String, dynamic>> items) => items.fold<int>(
-              0,
-              (total, data) => total +
-                  (((data['durationSeconds'] as num?)?.toInt() ?? 0) ~/ 60),
-            );
+          0,
+          (total, data) =>
+              total + (((data['durationSeconds'] as num?)?.toInt() ?? 0) ~/ 60),
+        );
         double distance(List<Map<String, dynamic>> items) => items.fold<double>(
-              0,
-              (total, data) => total +
-                  ((data['distanceKm'] as num?)?.toDouble() ?? 0),
-            );
+          0,
+          (total, data) =>
+              total + ((data['distanceKm'] as num?)?.toDouble() ?? 0),
+        );
 
         final currentMinutes = minutes(current);
         final previousMinutes = minutes(previous);
@@ -2680,34 +3692,45 @@ class _FitnessScreenState extends State<FitnessScreen> {
         final distanceChange = previousDistance <= 0
             ? (currentDistance > 0 ? 'New activity' : 'No change')
             : currentDistance == previousDistance
-                ? 'No change'
-                : '${currentDistance > previousDistance ? '↑' : '↓'} ${( ((currentDistance - previousDistance).abs() / previousDistance) * 100).round()}%';
+            ? 'No change'
+            : '${currentDistance > previousDistance ? '↑' : '↓'} ${(((currentDistance - previousDistance).abs() / previousDistance) * 100).round()}%';
         final hasData = current.isNotEmpty || previous.isNotEmpty;
         final insight = !hasData
             ? 'Complete a workout to start building your training insights.'
             : current.length > previous.length
-                ? 'You completed more workouts than in the previous 7 days. Keep building that consistency.'
-                : currentMinutes > previousMinutes
-                    ? 'Your total training time is up compared with the previous 7 days.'
-                    : current.isEmpty
-                        ? 'No completed workouts in the last 7 days. Your previous activity is still available in workout history.'
-                        : 'Use this week as a fresh baseline and keep your training consistent.';
+            ? 'You completed more workouts than in the previous 7 days. Keep building that consistency.'
+            : currentMinutes > previousMinutes
+            ? 'Your total training time is up compared with the previous 7 days.'
+            : current.isEmpty
+            ? 'No completed workouts in the last 7 days. Your previous activity is still available in workout history.'
+            : 'Use this week as a fresh baseline and keep your training consistent.';
 
-        Widget metric(String label, String value, String change, IconData icon) {
+        Widget metric(
+          String label,
+          String value,
+          String change,
+          IconData icon,
+        ) {
           return Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(icon, size: 19, color: colors.primary),
                 const SizedBox(height: 7),
-                Text(value, style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                )),
+                Text(
+                  value,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 Text(label, style: theme.textTheme.bodySmall),
                 const SizedBox(height: 3),
-                Text(change, style: theme.textTheme.labelSmall?.copyWith(
-                  color: colors.onSurfaceVariant,
-                )),
+                Text(
+                  change,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
               ],
             ),
           );
@@ -2716,11 +3739,19 @@ class _FitnessScreenState extends State<FitnessScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Training insights',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'Training insights',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text('Last 7 days compared with the 7 days before',
-                style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+            Text(
+              'Last 7 days compared with the 7 days before',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 10),
             Card(
               elevation: 0,
@@ -2732,29 +3763,50 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   children: [
                     Row(
                       children: [
-                        metric('Workouts', '${current.length}', sessionChange, Icons.fitness_center),
+                        metric(
+                          'Workouts',
+                          '${current.length}',
+                          sessionChange,
+                          Icons.fitness_center,
+                        ),
                         const SizedBox(width: 8),
-                        metric('Training time', '${currentMinutes}m', minuteChange, Icons.timer_outlined),
+                        metric(
+                          'Training time',
+                          '${currentMinutes}m',
+                          minuteChange,
+                          Icons.timer_outlined,
+                        ),
                         const SizedBox(width: 8),
-                        metric('Distance', _distanceText(currentDistance, decimals: 1),
-                            distanceChange, Icons.route_outlined),
+                        metric(
+                          'Distance',
+                          _distanceText(currentDistance, decimals: 1),
+                          distanceChange,
+                          Icons.route_outlined,
+                        ),
                       ],
                     ),
                     const Divider(height: 24),
                     Text(insight, style: theme.textTheme.bodyMedium),
                     if (topTypes.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      Text('Workout mix', style: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      )),
+                      Text(
+                        'Workout mix',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const SizedBox(height: 7),
                       Wrap(
                         spacing: 7,
                         runSpacing: 7,
-                        children: topTypes.map((entry) => Chip(
-                          visualDensity: VisualDensity.compact,
-                          label: Text('${entry.key} · ${entry.value}'),
-                        )).toList(),
+                        children: topTypes
+                            .map(
+                              (entry) => Chip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text('${entry.key} · ${entry.value}'),
+                              ),
+                            )
+                            .toList(),
                       ),
                     ],
                   ],
@@ -2767,6 +3819,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Builds charts and comparisons showing how fitness performance changes over time.
   Widget _buildPerformanceTrendsSection(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -2806,8 +3859,8 @@ class _FitnessScreenState extends State<FitnessScreen> {
           final date = started is Timestamp
               ? started.toDate()
               : started is DateTime
-                  ? started
-                  : null;
+              ? started
+              : null;
           if (date == null) continue;
           final rawLogs = session['exerciseLogs'];
           if (rawLogs is! List) continue;
@@ -2841,7 +3894,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
               for (final set in sets) {
                 final reps = (set['reps'] as num?)?.toInt();
                 final weight = (set['weightKg'] as num?)?.toDouble();
-                if (reps == null || weight == null || reps < 0 || weight < 0) continue;
+                if (reps == null || weight == null || reps < 0 || weight < 0) {
+                  continue;
+                }
                 final metric = weight * reps;
                 if (metric > bestMetric) {
                   bestMetric = metric;
@@ -2850,26 +3905,35 @@ class _FitnessScreenState extends State<FitnessScreen> {
               }
             }
             if (bestMetric <= 0 || valueLabel.isEmpty) continue;
-            byExercise.putIfAbsent(exerciseId, () => <Map<String, dynamic>>[]).add({
-              'date': date,
-              'metric': bestMetric,
-              'label': valueLabel,
-              'timed': isTimed,
-            });
+            byExercise
+                .putIfAbsent(exerciseId, () => <Map<String, dynamic>>[])
+                .add({
+                  'date': date,
+                  'metric': bestMetric,
+                  'label': valueLabel,
+                  'timed': isTimed,
+                });
           }
         }
 
         final trends = <Map<String, dynamic>>[];
         for (final entry in byExercise.entries) {
           final entries = entry.value
-            ..sort((a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime));
+            ..sort(
+              (a, b) =>
+                  (a['date'] as DateTime).compareTo(b['date'] as DateTime),
+            );
           if (entries.length < 2) continue;
           final previous = entries[entries.length - 2];
           final latest = entries.last;
           final oldMetric = previous['metric'] as double;
           final newMetric = latest['metric'] as double;
-          final change = oldMetric == 0 ? 0.0 : ((newMetric - oldMetric) / oldMetric) * 100;
-          final exercise = _exerciseLibrary.where((item) => item.id == entry.key).firstOrNull;
+          final change = oldMetric == 0
+              ? 0.0
+              : ((newMetric - oldMetric) / oldMetric) * 100;
+          final exercise = _exerciseLibrary
+              .where((item) => item.id == entry.key)
+              .firstOrNull;
           trends.add({
             'name': exercise?.name ?? entry.key,
             'latestLabel': latest['label'],
@@ -2880,18 +3944,27 @@ class _FitnessScreenState extends State<FitnessScreen> {
             'sessions': entries.length,
           });
         }
-        trends.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+        trends.sort(
+          (a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime),
+        );
         final displayed = trends.take(5).toList();
         final trackedCount = byExercise.length;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Performance trends', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'Performance trends',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
               'Exercise-by-exercise comparisons from your last 90 days of completed guided workouts.',
-              style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 10),
             Card(
@@ -2907,16 +3980,28 @@ class _FitnessScreenState extends State<FitnessScreen> {
                         Icon(Icons.insights_outlined, color: colors.primary),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text('$trackedCount exercises tracked', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                          child: Text(
+                            '$trackedCount exercises tracked',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                        Text('90 days', style: theme.textTheme.labelMedium?.copyWith(color: colors.onSurfaceVariant)),
+                        Text(
+                          '90 days',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     if (displayed.isEmpty)
                       Text(
                         'Complete the same guided exercise in at least two workouts to see how your performance changes here.',
-                        style: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
                       )
                     else
                       ...displayed.map((trend) {
@@ -2926,14 +4011,15 @@ class _FitnessScreenState extends State<FitnessScreen> {
                         final color = improved
                             ? colors.primary
                             : declined
-                                ? colors.error
-                                : colors.onSurfaceVariant;
+                            ? colors.error
+                            : colors.onSurfaceVariant;
                         final icon = improved
                             ? Icons.trending_up
                             : declined
-                                ? Icons.trending_down
-                                : Icons.trending_flat;
-                        final changeText = '${change > 0 ? '+' : ''}${change.toStringAsFixed(0)}%';
+                            ? Icons.trending_down
+                            : Icons.trending_flat;
+                        final changeText =
+                            '${change > 0 ? '+' : ''}${change.toStringAsFixed(0)}%';
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Column(
@@ -2942,21 +4028,37 @@ class _FitnessScreenState extends State<FitnessScreen> {
                               Row(
                                 children: [
                                   Expanded(
-                                    child: Text(trend['name'] as String, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+                                    child: Text(
+                                      trend['name'] as String,
+                                      style: theme.textTheme.bodyLarge
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
                                   ),
                                   Icon(icon, size: 18, color: color),
                                   const SizedBox(width: 3),
-                                  Text(changeText, style: theme.textTheme.labelLarge?.copyWith(color: color, fontWeight: FontWeight.bold)),
+                                  Text(
+                                    changeText,
+                                    style: theme.textTheme.labelLarge?.copyWith(
+                                      color: color,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 3),
                               Text(
                                 'Previous: ${trend['previousLabel']}   ·   Latest: ${trend['latestLabel']}',
-                                style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                ),
                               ),
                               Text(
                                 '${trend['sessions']} sessions logged · compared with your previous session',
-                                style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                ),
                               ),
                             ],
                           ),
@@ -2965,7 +4067,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     const Divider(height: 8),
                     Text(
                       'Strength comparisons use the best set volume (weight × reps); timed exercises use the longest logged set. These are session-to-session comparisons, not medical or form assessments.',
-                      style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -2977,6 +4081,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Presents the training coach guidance overlay above the current screen.
   Future<void> _showTrainingCoachOverlay() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -2996,6 +4101,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Displays coaching guidance and suggested next steps for training.
   Widget _buildTrainingCoachSection(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -3012,9 +4118,17 @@ class _FitnessScreenState extends State<FitnessScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Training coach', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                'Training coach',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 8),
-              Text('Training suggestions are temporarily unavailable.', style: theme.textTheme.bodySmall),
+              Text(
+                'Training suggestions are temporarily unavailable.',
+                style: theme.textTheme.bodySmall,
+              ),
             ],
           );
         }
@@ -3033,22 +4147,26 @@ class _FitnessScreenState extends State<FitnessScreen> {
             if (rawLog is! Map) continue;
             final log = Map<String, dynamic>.from(rawLog);
             final id = log['exerciseId'] as String?;
-            if (id == null || id.isEmpty || latestByExercise.containsKey(id)) continue;
+            if (id == null || id.isEmpty || latestByExercise.containsKey(id)) {
+              continue;
+            }
             if (log['completed'] != true) continue;
             final setsRaw = log['sets'];
             final sets = setsRaw is List
-                ? setsRaw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+                ? setsRaw
+                      .whereType<Map>()
+                      .map((item) => Map<String, dynamic>.from(item))
+                      .toList()
                 : <Map<String, dynamic>>[];
             if (sets.isEmpty) continue;
-            latestByExercise[id] = {
-              'log': log,
-              'sets': sets,
-            };
+            latestByExercise[id] = {'log': log, 'sets': sets};
           }
         }
 
         for (final entry in latestByExercise.entries) {
-          final exercise = _exerciseLibrary.where((item) => item.id == entry.key).firstOrNull;
+          final exercise = _exerciseLibrary
+              .where((item) => item.id == entry.key)
+              .firstOrNull;
           final log = entry.value['log'] as Map<String, dynamic>;
           final sets = entry.value['sets'] as List<Map<String, dynamic>>;
           final isTimed = sets.first.containsKey('durationSeconds');
@@ -3065,44 +4183,79 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 .toList();
             final average = durations.isEmpty
                 ? 0
-                : (durations.reduce((a, b) => a + b) / durations.length).round();
-            final shortest = durations.isEmpty ? 0 : durations.reduce((a, b) => a < b ? a : b);
+                : (durations.reduce((a, b) => a + b) / durations.length)
+                      .round();
+            final shortest = durations.isEmpty
+                ? 0
+                : durations.reduce((a, b) => a < b ? a : b);
             if (completedSetCount >= 3 && durations.length >= 3) {
               final increment = shortest >= 45 ? 5 : (shortest >= 20 ? 3 : 2);
-              recommendation = 'Aim for about ${average + increment} seconds per set next time.';
-              rationale = 'Your ${durations.length} logged sets averaged ${average}s, with your shortest at ${shortest}s. A small time increase is a measured next step.';
+              recommendation =
+                  'Aim for about ${average + increment} seconds per set next time.';
+              rationale =
+                  'Your ${durations.length} logged sets averaged ${average}s, with your shortest at ${shortest}s. A small time increase is a measured next step.';
               icon = Icons.timer_outlined;
             } else {
-              recommendation = 'Build toward 3 timed sets of about ${average > 0 ? '$average seconds' : 'a consistent duration'}.';
-              rationale = 'You logged $completedSetCount set${completedSetCount == 1 ? '' : 's'} so far. Establish a repeatable baseline before extending the hold or interval.';
+              recommendation =
+                  'Build toward 3 timed sets of about ${average > 0 ? '$average seconds' : 'a consistent duration'}.';
+              rationale =
+                  'You logged $completedSetCount set${completedSetCount == 1 ? '' : 's'} so far. Establish a repeatable baseline before extending the hold or interval.';
               icon = Icons.repeat;
             }
           } else {
-            final validSets = sets.where((set) =>
-                set['reps'] is num && set['weightKg'] is num).toList();
-            final reps = validSets.map((set) => (set['reps'] as num).toInt()).toList();
-            final weights = validSets.map((set) => (set['weightKg'] as num).toDouble()).toList();
-            final lowestReps = reps.isEmpty ? 0 : reps.reduce((a, b) => a < b ? a : b);
-            final highestReps = reps.isEmpty ? 0 : reps.reduce((a, b) => a > b ? a : b);
-            final averageReps = reps.isEmpty ? 0 : (reps.reduce((a, b) => a + b) / reps.length).round();
+            final validSets = sets
+                .where((set) => set['reps'] is num && set['weightKg'] is num)
+                .toList();
+            final reps = validSets
+                .map((set) => (set['reps'] as num).toInt())
+                .toList();
+            final weights = validSets
+                .map((set) => (set['weightKg'] as num).toDouble())
+                .toList();
+            final lowestReps = reps.isEmpty
+                ? 0
+                : reps.reduce((a, b) => a < b ? a : b);
+            final highestReps = reps.isEmpty
+                ? 0
+                : reps.reduce((a, b) => a > b ? a : b);
+            final averageReps = reps.isEmpty
+                ? 0
+                : (reps.reduce((a, b) => a + b) / reps.length).round();
             final load = weights.isEmpty ? 0.0 : weights.last;
-            final sameLoad = weights.isNotEmpty && weights.every((value) => (value - load).abs() < 0.001);
+            final sameLoad =
+                weights.isNotEmpty &&
+                weights.every((value) => (value - load).abs() < 0.001);
 
-            if (completedSetCount >= 3 && reps.length >= 3 && sameLoad && lowestReps >= 12 && load > 0) {
+            if (completedSetCount >= 3 &&
+                reps.length >= 3 &&
+                sameLoad &&
+                lowestReps >= 12 &&
+                load > 0) {
               recommendation = 'Consider the next small weight increment, aiming for 8–10 controlled reps.';
-              rationale = 'You completed ${reps.length} sets at ${_formatWeightFromKg(load)}, averaging $averageReps reps (minimum $lowestReps).';
+              rationale =
+                  'You completed ${reps.length} sets at ${_formatWeightFromKg(load)}, averaging $averageReps reps (minimum $lowestReps).';
               icon = Icons.fitness_center;
-            } else if (completedSetCount >= 3 && reps.length >= 3 && lowestReps >= 12 && load == 0) {
+            } else if (completedSetCount >= 3 &&
+                reps.length >= 3 &&
+                lowestReps >= 12 &&
+                load == 0) {
               recommendation = 'Try adding 1–2 reps to each set while keeping your form steady.';
-              rationale = 'Your bodyweight sets averaged $averageReps reps, and every logged set reached at least $lowestReps.';
+              rationale =
+                  'Your bodyweight sets averaged $averageReps reps, and every logged set reached at least $lowestReps.';
               icon = Icons.trending_up;
-            } else if (completedSetCount >= 3 && reps.length >= 3 && highestReps - lowestReps <= 2) {
-              recommendation = 'Keep the same load and add 1 rep to your lowest-rep set.';
-              rationale = 'Your sets were consistent at $lowestReps–$highestReps reps using ${_formatWeightFromKg(load)}.';
+            } else if (completedSetCount >= 3 &&
+                reps.length >= 3 &&
+                highestReps - lowestReps <= 2) {
+              recommendation =
+                  'Keep the same load and add 1 rep to your lowest-rep set.';
+              rationale =
+                  'Your sets were consistent at $lowestReps–$highestReps reps using ${_formatWeightFromKg(load)}.';
               icon = Icons.trending_up;
             } else if (reps.isNotEmpty) {
-              recommendation = 'Keep ${_formatWeightFromKg(load)} and aim to bring every set up to $averageReps reps.';
-              rationale = 'Your logged sets ranged from $lowestReps to $highestReps reps. Improve consistency before increasing the load.';
+              recommendation =
+                  'Keep ${_formatWeightFromKg(load)} and aim to bring every set up to $averageReps reps.';
+              rationale =
+                  'Your logged sets ranged from $lowestReps to $highestReps reps. Improve consistency before increasing the load.';
               icon = Icons.repeat;
             } else {
               recommendation = 'Log your reps and weight for each set to unlock a specific progression.';
@@ -3112,7 +4265,8 @@ class _FitnessScreenState extends State<FitnessScreen> {
           }
 
           suggestions.add({
-            'name': exercise?.name ?? (log['exerciseName'] as String? ?? entry.key),
+            'name':
+                exercise?.name ?? (log['exerciseName'] as String? ?? entry.key),
             'recommendation': recommendation,
             'rationale': rationale,
             'icon': icon,
@@ -3123,11 +4277,18 @@ class _FitnessScreenState extends State<FitnessScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Training coach', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'Training coach',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 5),
             Text(
               'Practical next-session suggestions based on your recent guided workouts.',
-              style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 10),
             Card(
@@ -3136,39 +4297,61 @@ class _FitnessScreenState extends State<FitnessScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: displayed.isEmpty
-                    ? const Text('Complete a guided workout with logged exercise sets to receive progression suggestions here.')
+                    ? const Text(
+                        'Complete a guided workout with logged exercise sets to receive progression suggestions here.',
+                      )
                     : Column(
                         children: [
-                          ...displayed.map((item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CircleAvatar(
-                                  radius: 18,
-                                  backgroundColor: colors.primaryContainer,
-                                  child: Icon(item['icon'] as IconData, size: 19, color: colors.onPrimaryContainer),
-                                ),
-                                const SizedBox(width: 11),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(item['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                      const SizedBox(height: 3),
-                                      Text(item['recommendation'] as String),
-                                      const SizedBox(height: 2),
-                                      Text(item['rationale'] as String, style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
-                                    ],
+                          ...displayed.map(
+                            (item) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: colors.primaryContainer,
+                                    child: Icon(
+                                      item['icon'] as IconData,
+                                      size: 19,
+                                      color: colors.onPrimaryContainer,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 11),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item['name'] as String,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(item['recommendation'] as String),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          item['rationale'] as String,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: colors.onSurfaceVariant,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          )),
+                          ),
                           const Divider(),
                           Text(
                             'These are optional training suggestions, not automatic changes. Increase difficulty only when your form and recovery feel good.',
-                            style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
                         ],
                       ),
@@ -3180,6 +4363,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Lists available structured training programs.
   Widget _buildTrainingProgramsSection(BuildContext context) {
     final theme = Theme.of(context);
     final plans = _trainingPlans
@@ -3189,16 +4373,27 @@ class _FitnessScreenState extends State<FitnessScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Training programs', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        Text(
+          'Training programs',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 5),
         Text(
           'Choose a structured program that matches your experience.',
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 12),
         SegmentedButton<String>(
           segments: const [
-            ButtonSegment(value: 'Beginner', label: Text('Beginner'), icon: Icon(Icons.directions_walk)),
+            ButtonSegment(
+              value: 'Beginner',
+              label: Text('Beginner'),
+              icon: Icon(Icons.directions_walk),
+            ),
             ButtonSegment(value: 'Intermediate', label: Text('Intermediate')),
             ButtonSegment(value: 'Advanced', label: Text('Advanced')),
           ],
@@ -3214,6 +4409,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Displays a single training plan with its level, duration, and summary.
   Widget _buildTrainingPlanCard(BuildContext context, _WorkoutPlan plan) {
     final colors = Theme.of(context).colorScheme;
     final icon = _iconForCategory(plan.category);
@@ -3238,13 +4434,20 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(plan.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      plan.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     const SizedBox(height: 3),
-                    Text(plan.description, style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      plan.description,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                     const SizedBox(height: 6),
                     Text(
                       '${plan.durationMinutes} min  ·  ${plan.exerciseIds.length} exercises  ·  ${plan.category}',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: colors.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -3272,9 +4475,14 @@ class _FitnessScreenState extends State<FitnessScreen> {
     }
   }
 
+/// Opens the detailed schedule and exercise list for a selected plan.
   Future<void> _showPlanDetails(_WorkoutPlan plan) async {
     final exercises = plan.exerciseIds
-        .map((id) => _exerciseLibrary.where((exercise) => exercise.id == id).firstOrNull)
+        .map(
+          (id) => _exerciseLibrary
+              .where((exercise) => exercise.id == id)
+              .firstOrNull,
+        )
         .whereType<_Exercise>()
         .toList();
 
@@ -3290,22 +4498,38 @@ class _FitnessScreenState extends State<FitnessScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(plan.name, style: Theme.of(sheetContext).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  plan.name,
+                  style: Theme.of(sheetContext).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 6),
-                Text('${plan.level} · ${plan.category} · ${plan.durationMinutes} minutes'),
+                Text(
+                  '${plan.level} · ${plan.category} · ${plan.durationMinutes} minutes',
+                ),
                 const SizedBox(height: 10),
                 Text(plan.description),
                 const SizedBox(height: 18),
-                Text('Exercises', style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Exercises',
+                  style: Theme.of(sheetContext).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
-                ...exercises.map((exercise) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(child: Icon(_iconForCategory(exercise.category))),
-                  title: Text(exercise.name),
-                  subtitle: Text('${exercise.category} · ${exercise.equipment}'),
-                  trailing: const Icon(Icons.info_outline),
-                  onTap: () => _showExerciseDetails(exercise),
-                )),
+                ...exercises.map(
+                  (exercise) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      child: Icon(_iconForCategory(exercise.category)),
+                    ),
+                    title: Text(exercise.name),
+                    subtitle: Text(
+                      '${exercise.category} · ${exercise.equipment}',
+                    ),
+                    trailing: const Icon(Icons.info_outline),
+                    onTap: () => _showExerciseDetails(exercise),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
@@ -3314,12 +4538,15 @@ class _FitnessScreenState extends State<FitnessScreen> {
                         ? null
                         : () async {
                             Navigator.pop(sheetContext);
-                            await _startWorkout(plan.category, sessionData: {
-                              'planId': plan.id,
-                              'planName': plan.name,
-                              'trainingLevel': plan.level,
-                              'plannedExerciseIds': plan.exerciseIds,
-                            });
+                            await _startWorkout(
+                              plan.category,
+                              sessionData: {
+                                'planId': plan.id,
+                                'planName': plan.name,
+                                'trainingLevel': plan.level,
+                                'plannedExerciseIds': plan.exerciseIds,
+                              },
+                            );
                           },
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Start this program'),
@@ -3333,6 +4560,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Introduces the exercise library and its browsing controls.
   Widget _buildExerciseLibrarySection(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
@@ -3340,12 +4568,29 @@ class _FitnessScreenState extends State<FitnessScreen> {
       children: [
         Row(
           children: [
-            Expanded(child: Text('Exercise library', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold))),
-            Text('${_exerciseLibrary.length} exercises', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Expanded(
+              child: Text(
+                'Exercise library',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Text(
+              '${_exerciseLibrary.length} exercises',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 5),
-        Text('Learn how to perform exercises and explore different training styles.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        Text(
+          'Learn how to perform exercises and explore different training styles.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: _showExerciseLibrary,
@@ -3356,9 +4601,16 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Opens the searchable list of available exercises.
   Future<void> _showExerciseLibrary() async {
     String selectedCategory = 'All';
-    final categories = ['All', 'Strength', 'Cardio', 'Mobility', 'Conditioning'];
+    final categories = [
+      'All',
+      'Strength',
+      'Cardio',
+      'Mobility',
+      'Conditioning',
+    ];
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -3366,7 +4618,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final exercises = _exerciseLibrary
-              .where((exercise) => selectedCategory == 'All' || exercise.category == selectedCategory)
+              .where(
+                (exercise) =>
+                    selectedCategory == 'All' ||
+                    exercise.category == selectedCategory,
+              )
               .toList();
           return SafeArea(
             child: SizedBox(
@@ -3376,19 +4632,29 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Exercise library', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                    Text(
+                      'Exercise library',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
                     const SizedBox(height: 12),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: categories.map((category) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(category),
-                            selected: selectedCategory == category,
-                            onSelected: (_) => setSheetState(() => selectedCategory = category),
-                          ),
-                        )).toList(),
+                        children: categories
+                            .map(
+                              (category) => Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  label: Text(category),
+                                  selected: selectedCategory == category,
+                                  onSelected: (_) => setSheetState(
+                                    () => selectedCategory = category,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -3399,9 +4665,18 @@ class _FitnessScreenState extends State<FitnessScreen> {
                           final exercise = exercises[index];
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
-                            leading: CircleAvatar(child: Icon(_iconForCategory(exercise.category))),
-                            title: Text(exercise.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text('${exercise.category} · ${exercise.equipment} · ${exercise.level}'),
+                            leading: CircleAvatar(
+                              child: Icon(_iconForCategory(exercise.category)),
+                            ),
+                            title: Text(
+                              exercise.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${exercise.category} · ${exercise.equipment} · ${exercise.level}',
+                            ),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => _showExerciseDetails(exercise),
                           );
@@ -3418,6 +4693,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Shows instructions and details for the selected exercise.
   Future<void> _showExerciseDetails(_Exercise exercise) async {
     await showDialog<void>(
       context: context,
@@ -3428,28 +4704,43 @@ class _FitnessScreenState extends State<FitnessScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Wrap(spacing: 6, runSpacing: 6, children: [
-                Chip(label: Text(exercise.category)),
-                Chip(label: Text(exercise.level)),
-                Chip(label: Text(exercise.equipment)),
-              ]),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  Chip(label: Text(exercise.category)),
+                  Chip(label: Text(exercise.level)),
+                  Chip(label: Text(exercise.equipment)),
+                ],
+              ),
               const SizedBox(height: 8),
               Text(exercise.description),
               const SizedBox(height: 14),
-              const Text('How to perform it', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'How to perform it',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 6),
-              ...exercise.instructions.asMap().entries.map((entry) => Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: Text('${entry.key + 1}. ${entry.value}'),
-              )),
+              ...exercise.instructions.asMap().entries.map(
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: Text('${entry.key + 1}. ${entry.value}'),
+                ),
+              ),
             ],
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close'))],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
 
+/// Displays workouts created by the user and actions to manage them.
   Widget _buildCustomWorkoutsSection(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
@@ -3457,7 +4748,14 @@ class _FitnessScreenState extends State<FitnessScreen> {
       children: [
         Row(
           children: [
-            Expanded(child: Text('Your custom workouts', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold))),
+            Expanded(
+              child: Text(
+                'Your custom workouts',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
             IconButton(
               tooltip: 'Create custom workout',
               onPressed: _showCustomWorkoutBuilder,
@@ -3465,7 +4763,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
             ),
           ],
         ),
-        Text('Build a routine from the exercise library.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        Text(
+          'Build a routine from the exercise library.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
         const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,
@@ -3477,13 +4780,24 @@ class _FitnessScreenState extends State<FitnessScreen> {
         ),
         const SizedBox(height: 8),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: _customWorkouts.orderBy('updatedAt', descending: true).limit(10).snapshots(),
+          stream: _customWorkouts
+              .orderBy('updatedAt', descending: true)
+              .limit(10)
+              .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
-              return Text('Custom workouts could not be loaded. Check your Firestore rules.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error));
+              return Text(
+                'Custom workouts could not be loaded. Check your Firestore rules.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              );
             }
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()));
+              return const Padding(
+                padding: EdgeInsets.all(12),
+                child: Center(child: CircularProgressIndicator()),
+              );
             }
             final docs = snapshot.data?.docs ?? [];
             if (docs.isEmpty) {
@@ -3500,21 +4814,37 @@ class _FitnessScreenState extends State<FitnessScreen> {
               children: docs.map((doc) {
                 final data = doc.data();
                 final name = data['name'] as String? ?? 'Custom workout';
-                final ids = (data['exerciseIds'] as List<dynamic>? ?? []).cast<String>();
+                final ids = (data['exerciseIds'] as List<dynamic>? ?? [])
+                    .cast<String>();
                 return Card(
                   elevation: 0,
                   color: theme.colorScheme.surfaceContainerLow,
                   child: ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.playlist_add_check)),
-                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('${data['level'] ?? 'Beginner'} · ${ids.length} exercises'),
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.playlist_add_check),
+                    ),
+                    title: Text(
+                      name,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '${data['level'] ?? 'Beginner'} · ${ids.length} exercises',
+                    ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
                       final selected = ids
-                          .map((id) => _exerciseLibrary.where((exercise) => exercise.id == id).firstOrNull)
+                          .map(
+                            (id) => _exerciseLibrary
+                                .where((exercise) => exercise.id == id)
+                                .firstOrNull,
+                          )
                           .whereType<_Exercise>()
                           .toList();
-                      _showCustomWorkoutDetails(name, data['level'] as String? ?? 'Beginner', selected);
+                      _showCustomWorkoutDetails(
+                        name,
+                        data['level'] as String? ?? 'Beginner',
+                        selected,
+                      );
                     },
                   ),
                 );
@@ -3526,6 +4856,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
+/// Opens the builder used to create and save a custom workout.
   Future<void> _showCustomWorkoutBuilder() async {
     String name = '';
     String level = _selectedTrainingLevel;
@@ -3541,31 +4872,61 @@ class _FitnessScreenState extends State<FitnessScreen> {
           child: SizedBox(
             height: MediaQuery.of(context).size.height * 0.88,
             child: Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Build a workout', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(
+                    'Build a workout',
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 12),
                   TextFormField(
                     initialValue: name,
-                    decoration: const InputDecoration(labelText: 'Workout name', hintText: 'e.g. Monday full body', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Workout name',
+                      hintText: 'e.g. Monday full body',
+                      border: OutlineInputBorder(),
+                    ),
                     textCapitalization: TextCapitalization.words,
                     onChanged: (value) => name = value,
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: level,
-                    decoration: const InputDecoration(labelText: 'Experience level', border: OutlineInputBorder()),
+                    initialValue: level,
+                    decoration: const InputDecoration(
+                      labelText: 'Experience level',
+                      border: OutlineInputBorder(),
+                    ),
                     items: const [
-                      DropdownMenuItem(value: 'Beginner', child: Text('Beginner')),
-                      DropdownMenuItem(value: 'Intermediate', child: Text('Intermediate')),
-                      DropdownMenuItem(value: 'Advanced', child: Text('Advanced')),
+                      DropdownMenuItem(
+                        value: 'Beginner',
+                        child: Text('Beginner'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Intermediate',
+                        child: Text('Intermediate'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Advanced',
+                        child: Text('Advanced'),
+                      ),
                     ],
-                    onChanged: (value) { if (value != null) setSheetState(() => level = value); },
+                    onChanged: (value) {
+                      if (value != null) setSheetState(() => level = value);
+                    },
                   ),
                   const SizedBox(height: 12),
-                  Text('Select exercises (${selectedIds.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    'Select exercises (${selectedIds.length})',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
                   Expanded(
                     child: ListView.builder(
@@ -3576,7 +4937,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
                           value: selectedIds.contains(exercise.id),
                           contentPadding: EdgeInsets.zero,
                           title: Text(exercise.name),
-                          subtitle: Text('${exercise.category} · ${exercise.level}'),
+                          subtitle: Text(
+                            '${exercise.category} · ${exercise.level}',
+                          ),
                           onChanged: (checked) => setSheetState(() {
                             if (checked == true) {
                               selectedIds.add(exercise.id);
@@ -3591,33 +4954,55 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: saving ? null : () async {
-                        final workoutName = name.trim();
-                        if (workoutName.isEmpty || selectedIds.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a name and select at least one exercise.')));
-                          return;
-                        }
-                        setSheetState(() => saving = true);
-                        try {
-                          await _customWorkouts.add({
-                            'name': workoutName,
-                            'level': level,
-                            'exerciseIds': selectedIds.toList(),
-                            'createdAt': FieldValue.serverTimestamp(),
-                            'updatedAt': FieldValue.serverTimestamp(),
-                          });
-                          if (sheetContext.mounted) Navigator.pop(sheetContext);
-                          _showMessage('Custom workout saved.');
-                        } catch (error) {
-                          if (sheetContext.mounted) {
-                            setSheetState(() => saving = false);
-                            ScaffoldMessenger.of(sheetContext).showSnackBar(
-                              SnackBar(content: Text('Could not save this workout: $error')),
-                            );
-                          }
-                        }
-                      },
-                      icon: saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined),
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              final workoutName = name.trim();
+                              if (workoutName.isEmpty || selectedIds.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Enter a name and select at least one exercise.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              setSheetState(() => saving = true);
+                              try {
+                                await _customWorkouts.add({
+                                  'name': workoutName,
+                                  'level': level,
+                                  'exerciseIds': selectedIds.toList(),
+                                  'createdAt': FieldValue.serverTimestamp(),
+                                  'updatedAt': FieldValue.serverTimestamp(),
+                                });
+                                if (sheetContext.mounted) {
+                                  Navigator.pop(sheetContext);
+                                }
+                                _showMessage('Custom workout saved.');
+                              } catch (error) {
+                                if (sheetContext.mounted) {
+                                  setSheetState(() => saving = false);
+                                  ScaffoldMessenger.of(
+                                    sheetContext,
+                                  ).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Could not save this workout: $error',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                      icon: saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_outlined),
                       label: Text(saving ? 'Saving...' : 'Save workout'),
                     ),
                   ),
@@ -3630,7 +5015,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
   }
 
-  Future<void> _showCustomWorkoutDetails(String name, String level, List<_Exercise> exercises) async {
+/// Displays the exercises and details for a saved custom workout.
+  Future<void> _showCustomWorkoutDetails(
+    String name,
+    String level,
+    List<_Exercise> exercises,
+  ) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -3645,23 +5035,28 @@ class _FitnessScreenState extends State<FitnessScreen> {
               children: [
                 Text(
                   name,
-                  style: Theme.of(sheetContext).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: Theme.of(sheetContext).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Text('$level · ${exercises.length} exercises'),
                 const SizedBox(height: 12),
                 Expanded(
                   child: exercises.isEmpty
-                      ? const Center(child: Text('This workout has no available exercises.'))
+                      ? const Center(
+                          child: Text(
+                            'This workout has no available exercises.',
+                          ),
+                        )
                       : ListView.builder(
                           itemCount: exercises.length,
                           itemBuilder: (context, index) {
                             final exercise = exercises[index];
                             return ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: Icon(_iconForCategory(exercise.category)),
+                              leading: Icon(
+                                _iconForCategory(exercise.category),
+                              ),
                               title: Text(exercise.name),
                               subtitle: Text(exercise.category),
                               onTap: () => _showExerciseDetails(exercise),
@@ -3673,16 +5068,24 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: _activeWorkoutId != null || _isStarting || exercises.isEmpty
+                    onPressed:
+                        _activeWorkoutId != null ||
+                            _isStarting ||
+                            exercises.isEmpty
                         ? null
                         : () async {
                             Navigator.pop(sheetContext);
-                            await _startWorkout('Custom workout', sessionData: {
-                              'customWorkoutName': name,
-                              'planName': name,
-                              'trainingLevel': level,
-                              'plannedExerciseIds': exercises.map((exercise) => exercise.id).toList(),
-                            });
+                            await _startWorkout(
+                              'Custom workout',
+                              sessionData: {
+                                'customWorkoutName': name,
+                                'planName': name,
+                                'trainingLevel': level,
+                                'plannedExerciseIds': exercises
+                                    .map((exercise) => exercise.id)
+                                    .toList(),
+                              },
+                            );
                           },
                     child: const Text('Start this workout'),
                   ),
@@ -3694,10 +5097,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
       ),
     );
   }
-
 }
 
-
+/// Data model describing an exercise used in plans and guided sessions.
 class _Exercise {
   const _Exercise({
     required this.id,
@@ -3718,6 +5120,7 @@ class _Exercise {
   final List<String> instructions;
 }
 
+/// Data model for a structured workout plan and its exercise sequence.
 class _WorkoutPlan {
   const _WorkoutPlan({
     required this.id,
@@ -3739,41 +5142,417 @@ class _WorkoutPlan {
 }
 
 const List<_Exercise> _exerciseLibrary = [
-  _Exercise(id: 'bodyweight_squat', name: 'Bodyweight squat', category: 'Strength', equipment: 'None', level: 'Beginner', description: 'A foundational lower-body movement that trains the hips and legs.', instructions: ['Stand with feet about shoulder-width apart.', 'Brace your midsection and sit your hips back and down.', 'Keep your knees tracking in line with your toes.', 'Press through your feet to stand tall.']),
-  _Exercise(id: 'wall_push_up', name: 'Wall push-up', category: 'Strength', equipment: 'Wall', level: 'Beginner', description: 'An accessible pushing exercise that builds upper-body strength.', instructions: ['Face a wall and place hands slightly wider than shoulder-width.', 'Step back until your body forms a straight line.', 'Bend your elbows to bring your chest toward the wall.', 'Push back to the starting position.']),
-  _Exercise(id: 'incline_push_up', name: 'Incline push-up', category: 'Strength', equipment: 'Stable bench', level: 'Beginner', description: 'A modified push-up with hands elevated on a stable surface.', instructions: ['Place hands on a secure bench or counter.', 'Walk feet back and keep your body straight.', 'Lower your chest toward the surface.', 'Press through your hands to return.']),
-  _Exercise(id: 'push_up', name: 'Push-up', category: 'Strength', equipment: 'None', level: 'Intermediate', description: 'A compound upper-body exercise for the chest, shoulders, and arms.', instructions: ['Start in a high plank with hands under or just outside shoulders.', 'Keep your body aligned from head to heels.', 'Lower with control until your chest approaches the floor.', 'Press back up without letting your hips sag.']),
-  _Exercise(id: 'reverse_lunge', name: 'Reverse lunge', category: 'Strength', equipment: 'None', level: 'Beginner', description: 'A single-leg movement for the legs, hips, and balance.', instructions: ['Stand tall with feet hip-width apart.', 'Step one foot backward and lower both knees comfortably.', 'Keep your front knee aligned with your foot.', 'Push through the front foot to return and alternate sides.']),
-  _Exercise(id: 'glute_bridge', name: 'Glute bridge', category: 'Strength', equipment: 'Mat', level: 'Beginner', description: 'A floor-based exercise that targets the glutes and hip extensors.', instructions: ['Lie on your back with knees bent and feet flat.', 'Brace your abdomen and squeeze your glutes.', 'Lift hips until shoulders, hips, and knees form a line.', 'Lower slowly without arching your lower back.']),
-  _Exercise(id: 'plank', name: 'Forearm plank', category: 'Strength', equipment: 'Mat', level: 'Intermediate', description: 'An isometric core exercise focused on maintaining a stable trunk.', instructions: ['Place forearms on the floor with elbows under shoulders.', 'Extend legs and support your body on forearms and toes.', 'Keep ribs down and hips level.', 'Hold while breathing steadily; stop before form breaks.']),
-  _Exercise(id: 'dumbbell_row', name: 'Dumbbell row', category: 'Strength', equipment: 'Dumbbells', level: 'Intermediate', description: 'A pulling exercise for the upper back and arms.', instructions: ['Hinge at the hips with a neutral back.', 'Let the dumbbells hang beneath your shoulders.', 'Pull elbows toward your hips without twisting.', 'Lower the weights with control.']),
-  _Exercise(id: 'jump_squat', name: 'Jump squat', category: 'Conditioning', equipment: 'None', level: 'Advanced', description: 'An explosive lower-body movement. Use only if jumping is comfortable and appropriate.', instructions: ['Stand with feet about shoulder-width apart.', 'Lower into a controlled squat.', 'Drive through your feet to jump vertically.', 'Land softly with knees tracking over toes and reset.']),
-  _Exercise(id: 'brisk_walk', name: 'Brisk walk', category: 'Cardio', equipment: 'Comfortable shoes', level: 'Beginner', description: 'Steady walking at a pace that raises breathing while allowing conversation.', instructions: ['Begin with a comfortable warm-up pace.', 'Increase to a purposeful pace with relaxed shoulders.', 'Swing arms naturally and look ahead.', 'Slow down gradually to cool down.']),
-  _Exercise(id: 'march_in_place', name: 'March in place', category: 'Cardio', equipment: 'None', level: 'Beginner', description: 'A low-impact way to raise your heart rate indoors.', instructions: ['Stand tall with feet hip-width apart.', 'Lift one knee at a time in a comfortable rhythm.', 'Swing opposite arms naturally.', 'Keep the movement controlled and breathe steadily.']),
-  _Exercise(id: 'jogging', name: 'Easy jog', category: 'Cardio', equipment: 'Running shoes', level: 'Intermediate', description: 'A conversational-pace run for aerobic endurance.', instructions: ['Start with several minutes of brisk walking.', 'Jog at a pace that feels sustainable.', 'Use short, relaxed strides and steady breathing.', 'Finish with an easy walk.']),
-  _Exercise(id: 'cycling', name: 'Steady cycling', category: 'Cardio', equipment: 'Bicycle or stationary bike', level: 'Beginner', description: 'Low-impact aerobic training on a bicycle or stationary bike.', instructions: ['Adjust the bike so the riding position feels comfortable.', 'Begin with light resistance.', 'Pedal smoothly at a sustainable effort.', 'Reduce resistance and pedal easily to cool down.']),
-  _Exercise(id: 'high_knees', name: 'High knees', category: 'Conditioning', equipment: 'None', level: 'Intermediate', description: 'A rhythmic conditioning drill; use a lower-impact march if needed.', instructions: ['Stand tall with core gently braced.', 'Drive one knee upward while moving the opposite arm.', 'Alternate sides at a controlled rhythm.', 'Keep landings light and reduce speed if form slips.']),
-  _Exercise(id: 'mountain_climber', name: 'Mountain climber', category: 'Conditioning', equipment: 'Mat', level: 'Advanced', description: 'A dynamic plank-based conditioning exercise.', instructions: ['Begin in a strong high plank.', 'Bring one knee toward your chest.', 'Switch legs smoothly while keeping shoulders over wrists.', 'Maintain a stable trunk and stop if your lower back sags.']),
-  _Exercise(id: 'cat_cow', name: 'Cat-cow', category: 'Mobility', equipment: 'Mat', level: 'Beginner', description: 'A gentle spinal mobility sequence coordinated with breathing.', instructions: ['Start on hands and knees.', 'Exhale and gently round your back.', 'Inhale and move into a comfortable gentle arch.', 'Move slowly without forcing end ranges.']),
-  _Exercise(id: 'hip_flexor_stretch', name: 'Half-kneeling hip flexor stretch', category: 'Mobility', equipment: 'Mat', level: 'Beginner', description: 'A gentle stretch for the front of the hip.', instructions: ['Kneel with one foot forward and both knees comfortably bent.', 'Gently tuck your pelvis and brace your abdomen.', 'Shift forward slightly until you feel a mild stretch at the front of the rear hip.', 'Hold while breathing, then switch sides.']),
-  _Exercise(id: 'thoracic_rotation', name: 'Open-book rotation', category: 'Mobility', equipment: 'Mat', level: 'Beginner', description: 'A controlled upper-back rotation drill.', instructions: ['Lie on your side with knees bent and arms extended in front.', 'Keep knees stacked as you rotate your top arm and chest open.', 'Move only through a comfortable range.', 'Return slowly and repeat before switching sides.']),
+  _Exercise(
+    id: 'bodyweight_squat',
+    name: 'Bodyweight squat',
+    category: 'Strength',
+    equipment: 'None',
+    level: 'Beginner',
+    description:
+        'A foundational lower-body movement that trains the hips and legs.',
+    instructions: [
+      'Stand with feet about shoulder-width apart.',
+      'Brace your midsection and sit your hips back and down.',
+      'Keep your knees tracking in line with your toes.',
+      'Press through your feet to stand tall.',
+    ],
+  ),
+  _Exercise(
+    id: 'wall_push_up',
+    name: 'Wall push-up',
+    category: 'Strength',
+    equipment: 'Wall',
+    level: 'Beginner',
+    description:
+        'An accessible pushing exercise that builds upper-body strength.',
+    instructions: [
+      'Face a wall and place hands slightly wider than shoulder-width.',
+      'Step back until your body forms a straight line.',
+      'Bend your elbows to bring your chest toward the wall.',
+      'Push back to the starting position.',
+    ],
+  ),
+  _Exercise(
+    id: 'incline_push_up',
+    name: 'Incline push-up',
+    category: 'Strength',
+    equipment: 'Stable bench',
+    level: 'Beginner',
+    description: 'A modified push-up with hands elevated on a stable surface.',
+    instructions: [
+      'Place hands on a secure bench or counter.',
+      'Walk feet back and keep your body straight.',
+      'Lower your chest toward the surface.',
+      'Press through your hands to return.',
+    ],
+  ),
+  _Exercise(
+    id: 'push_up',
+    name: 'Push-up',
+    category: 'Strength',
+    equipment: 'None',
+    level: 'Intermediate',
+    description:
+        'A compound upper-body exercise for the chest, shoulders, and arms.',
+    instructions: [
+      'Start in a high plank with hands under or just outside shoulders.',
+      'Keep your body aligned from head to heels.',
+      'Lower with control until your chest approaches the floor.',
+      'Press back up without letting your hips sag.',
+    ],
+  ),
+  _Exercise(
+    id: 'reverse_lunge',
+    name: 'Reverse lunge',
+    category: 'Strength',
+    equipment: 'None',
+    level: 'Beginner',
+    description: 'A single-leg movement for the legs, hips, and balance.',
+    instructions: [
+      'Stand tall with feet hip-width apart.',
+      'Step one foot backward and lower both knees comfortably.',
+      'Keep your front knee aligned with your foot.',
+      'Push through the front foot to return and alternate sides.',
+    ],
+  ),
+  _Exercise(
+    id: 'glute_bridge',
+    name: 'Glute bridge',
+    category: 'Strength',
+    equipment: 'Mat',
+    level: 'Beginner',
+    description:
+        'A floor-based exercise that targets the glutes and hip extensors.',
+    instructions: [
+      'Lie on your back with knees bent and feet flat.',
+      'Brace your abdomen and squeeze your glutes.',
+      'Lift hips until shoulders, hips, and knees form a line.',
+      'Lower slowly without arching your lower back.',
+    ],
+  ),
+  _Exercise(
+    id: 'plank',
+    name: 'Forearm plank',
+    category: 'Strength',
+    equipment: 'Mat',
+    level: 'Intermediate',
+    description:
+        'An isometric core exercise focused on maintaining a stable trunk.',
+    instructions: [
+      'Place forearms on the floor with elbows under shoulders.',
+      'Extend legs and support your body on forearms and toes.',
+      'Keep ribs down and hips level.',
+      'Hold while breathing steadily; stop before form breaks.',
+    ],
+  ),
+  _Exercise(
+    id: 'dumbbell_row',
+    name: 'Dumbbell row',
+    category: 'Strength',
+    equipment: 'Dumbbells',
+    level: 'Intermediate',
+    description: 'A pulling exercise for the upper back and arms.',
+    instructions: [
+      'Hinge at the hips with a neutral back.',
+      'Let the dumbbells hang beneath your shoulders.',
+      'Pull elbows toward your hips without twisting.',
+      'Lower the weights with control.',
+    ],
+  ),
+  _Exercise(
+    id: 'jump_squat',
+    name: 'Jump squat',
+    category: 'Conditioning',
+    equipment: 'None',
+    level: 'Advanced',
+    description: 'An explosive lower-body movement. Use only if jumping is comfortable and appropriate.',
+    instructions: [
+      'Stand with feet about shoulder-width apart.',
+      'Lower into a controlled squat.',
+      'Drive through your feet to jump vertically.',
+      'Land softly with knees tracking over toes and reset.',
+    ],
+  ),
+  _Exercise(
+    id: 'brisk_walk',
+    name: 'Brisk walk',
+    category: 'Cardio',
+    equipment: 'Comfortable shoes',
+    level: 'Beginner',
+    description: 'Steady walking at a pace that raises breathing while allowing conversation.',
+    instructions: [
+      'Begin with a comfortable warm-up pace.',
+      'Increase to a purposeful pace with relaxed shoulders.',
+      'Swing arms naturally and look ahead.',
+      'Slow down gradually to cool down.',
+    ],
+  ),
+  _Exercise(
+    id: 'march_in_place',
+    name: 'March in place',
+    category: 'Cardio',
+    equipment: 'None',
+    level: 'Beginner',
+    description: 'A low-impact way to raise your heart rate indoors.',
+    instructions: [
+      'Stand tall with feet hip-width apart.',
+      'Lift one knee at a time in a comfortable rhythm.',
+      'Swing opposite arms naturally.',
+      'Keep the movement controlled and breathe steadily.',
+    ],
+  ),
+  _Exercise(
+    id: 'jogging',
+    name: 'Easy jog',
+    category: 'Cardio',
+    equipment: 'Running shoes',
+    level: 'Intermediate',
+    description: 'A conversational-pace run for aerobic endurance.',
+    instructions: [
+      'Start with several minutes of brisk walking.',
+      'Jog at a pace that feels sustainable.',
+      'Use short, relaxed strides and steady breathing.',
+      'Finish with an easy walk.',
+    ],
+  ),
+  _Exercise(
+    id: 'cycling',
+    name: 'Steady cycling',
+    category: 'Cardio',
+    equipment: 'Bicycle or stationary bike',
+    level: 'Beginner',
+    description: 'Low-impact aerobic training on a bicycle or stationary bike.',
+    instructions: [
+      'Adjust the bike so the riding position feels comfortable.',
+      'Begin with light resistance.',
+      'Pedal smoothly at a sustainable effort.',
+      'Reduce resistance and pedal easily to cool down.',
+    ],
+  ),
+  _Exercise(
+    id: 'high_knees',
+    name: 'High knees',
+    category: 'Conditioning',
+    equipment: 'None',
+    level: 'Intermediate',
+    description:
+        'A rhythmic conditioning drill; use a lower-impact march if needed.',
+    instructions: [
+      'Stand tall with core gently braced.',
+      'Drive one knee upward while moving the opposite arm.',
+      'Alternate sides at a controlled rhythm.',
+      'Keep landings light and reduce speed if form slips.',
+    ],
+  ),
+  _Exercise(
+    id: 'mountain_climber',
+    name: 'Mountain climber',
+    category: 'Conditioning',
+    equipment: 'Mat',
+    level: 'Advanced',
+    description: 'A dynamic plank-based conditioning exercise.',
+    instructions: [
+      'Begin in a strong high plank.',
+      'Bring one knee toward your chest.',
+      'Switch legs smoothly while keeping shoulders over wrists.',
+      'Maintain a stable trunk and stop if your lower back sags.',
+    ],
+  ),
+  _Exercise(
+    id: 'cat_cow',
+    name: 'Cat-cow',
+    category: 'Mobility',
+    equipment: 'Mat',
+    level: 'Beginner',
+    description:
+        'A gentle spinal mobility sequence coordinated with breathing.',
+    instructions: [
+      'Start on hands and knees.',
+      'Exhale and gently round your back.',
+      'Inhale and move into a comfortable gentle arch.',
+      'Move slowly without forcing end ranges.',
+    ],
+  ),
+  _Exercise(
+    id: 'hip_flexor_stretch',
+    name: 'Half-kneeling hip flexor stretch',
+    category: 'Mobility',
+    equipment: 'Mat',
+    level: 'Beginner',
+    description: 'A gentle stretch for the front of the hip.',
+    instructions: [
+      'Kneel with one foot forward and both knees comfortably bent.',
+      'Gently tuck your pelvis and brace your abdomen.',
+      'Shift forward slightly until you feel a mild stretch at the front of the rear hip.',
+      'Hold while breathing, then switch sides.',
+    ],
+  ),
+  _Exercise(
+    id: 'thoracic_rotation',
+    name: 'Open-book rotation',
+    category: 'Mobility',
+    equipment: 'Mat',
+    level: 'Beginner',
+    description: 'A controlled upper-back rotation drill.',
+    instructions: [
+      'Lie on your side with knees bent and arms extended in front.',
+      'Keep knees stacked as you rotate your top arm and chest open.',
+      'Move only through a comfortable range.',
+      'Return slowly and repeat before switching sides.',
+    ],
+  ),
 ];
 
 const List<_WorkoutPlan> _trainingPlans = [
-  _WorkoutPlan(id: 'beginner_full_body', name: 'Full Body Foundations', category: 'Strength', level: 'Beginner', durationMinutes: 25, description: 'Learn fundamental movements with manageable bodyweight exercises.', exerciseIds: ['bodyweight_squat', 'wall_push_up', 'glute_bridge', 'reverse_lunge', 'cat_cow']),
-  _WorkoutPlan(id: 'beginner_cardio', name: 'Cardio Starter', category: 'Cardio', level: 'Beginner', durationMinutes: 20, description: 'Build an aerobic routine with low-impact movement.', exerciseIds: ['brisk_walk', 'march_in_place', 'cycling']),
-  _WorkoutPlan(id: 'beginner_mobility', name: 'Daily Mobility Reset', category: 'Mobility', level: 'Beginner', durationMinutes: 15, description: 'A gentle routine for comfortable movement and flexibility.', exerciseIds: ['cat_cow', 'hip_flexor_stretch', 'thoracic_rotation']),
-  _WorkoutPlan(id: 'beginner_conditioning', name: 'Low-Impact Conditioning', category: 'Conditioning', level: 'Beginner', durationMinutes: 18, description: 'A simple conditioning session with scalable movements.', exerciseIds: ['march_in_place', 'bodyweight_squat', 'glute_bridge']),
-  _WorkoutPlan(id: 'intermediate_strength', name: 'Strength Builder', category: 'Strength', level: 'Intermediate', durationMinutes: 35, description: 'Combine compound movements for balanced full-body strength.', exerciseIds: ['bodyweight_squat', 'push_up', 'dumbbell_row', 'reverse_lunge', 'plank']),
-  _WorkoutPlan(id: 'intermediate_cardio', name: 'Endurance Builder', category: 'Cardio', level: 'Intermediate', durationMinutes: 30, description: 'Develop aerobic endurance through steady, repeatable effort.', exerciseIds: ['brisk_walk', 'jogging', 'cycling']),
-  _WorkoutPlan(id: 'intermediate_mobility', name: 'Movement and Mobility', category: 'Mobility', level: 'Intermediate', durationMinutes: 20, description: 'Work through controlled mobility drills for the hips and upper back.', exerciseIds: ['cat_cow', 'hip_flexor_stretch', 'thoracic_rotation', 'glute_bridge']),
-  _WorkoutPlan(id: 'intermediate_conditioning', name: 'Conditioning Circuit', category: 'Conditioning', level: 'Intermediate', durationMinutes: 25, description: 'A mixed circuit with steady cardio and dynamic bodyweight work.', exerciseIds: ['high_knees', 'bodyweight_squat', 'mountain_climber', 'reverse_lunge']),
-  _WorkoutPlan(id: 'advanced_strength', name: 'Advanced Bodyweight Strength', category: 'Strength', level: 'Advanced', durationMinutes: 40, description: 'A challenging bodyweight session. Scale repetitions to maintain sound technique.', exerciseIds: ['push_up', 'jump_squat', 'reverse_lunge', 'plank', 'mountain_climber']),
-  _WorkoutPlan(id: 'advanced_cardio', name: 'Cardio Performance', category: 'Cardio', level: 'Advanced', durationMinutes: 40, description: 'A higher-effort endurance session for experienced participants.', exerciseIds: ['jogging', 'high_knees', 'cycling']),
-  _WorkoutPlan(id: 'advanced_mobility', name: 'Extended Mobility Flow', category: 'Mobility', level: 'Advanced', durationMinutes: 25, description: 'A longer mobility sequence. Keep every movement controlled and pain-free.', exerciseIds: ['cat_cow', 'hip_flexor_stretch', 'thoracic_rotation', 'glute_bridge']),
-  _WorkoutPlan(id: 'advanced_conditioning', name: 'Advanced Conditioning Circuit', category: 'Conditioning', level: 'Advanced', durationMinutes: 30, description: 'A demanding circuit combining explosive and core-focused movements.', exerciseIds: ['jump_squat', 'mountain_climber', 'high_knees', 'plank']),
+  _WorkoutPlan(
+    id: 'beginner_full_body',
+    name: 'Full Body Foundations',
+    category: 'Strength',
+    level: 'Beginner',
+    durationMinutes: 25,
+    description:
+        'Learn fundamental movements with manageable bodyweight exercises.',
+    exerciseIds: [
+      'bodyweight_squat',
+      'wall_push_up',
+      'glute_bridge',
+      'reverse_lunge',
+      'cat_cow',
+    ],
+  ),
+  _WorkoutPlan(
+    id: 'beginner_cardio',
+    name: 'Cardio Starter',
+    category: 'Cardio',
+    level: 'Beginner',
+    durationMinutes: 20,
+    description: 'Build an aerobic routine with low-impact movement.',
+    exerciseIds: ['brisk_walk', 'march_in_place', 'cycling'],
+  ),
+  _WorkoutPlan(
+    id: 'beginner_mobility',
+    name: 'Daily Mobility Reset',
+    category: 'Mobility',
+    level: 'Beginner',
+    durationMinutes: 15,
+    description: 'A gentle routine for comfortable movement and flexibility.',
+    exerciseIds: ['cat_cow', 'hip_flexor_stretch', 'thoracic_rotation'],
+  ),
+  _WorkoutPlan(
+    id: 'beginner_conditioning',
+    name: 'Low-Impact Conditioning',
+    category: 'Conditioning',
+    level: 'Beginner',
+    durationMinutes: 18,
+    description: 'A simple conditioning session with scalable movements.',
+    exerciseIds: ['march_in_place', 'bodyweight_squat', 'glute_bridge'],
+  ),
+  _WorkoutPlan(
+    id: 'intermediate_strength',
+    name: 'Strength Builder',
+    category: 'Strength',
+    level: 'Intermediate',
+    durationMinutes: 35,
+    description: 'Combine compound movements for balanced full-body strength.',
+    exerciseIds: [
+      'bodyweight_squat',
+      'push_up',
+      'dumbbell_row',
+      'reverse_lunge',
+      'plank',
+    ],
+  ),
+  _WorkoutPlan(
+    id: 'intermediate_cardio',
+    name: 'Endurance Builder',
+    category: 'Cardio',
+    level: 'Intermediate',
+    durationMinutes: 30,
+    description: 'Develop aerobic endurance through steady, repeatable effort.',
+    exerciseIds: ['brisk_walk', 'jogging', 'cycling'],
+  ),
+  _WorkoutPlan(
+    id: 'intermediate_mobility',
+    name: 'Movement and Mobility',
+    category: 'Mobility',
+    level: 'Intermediate',
+    durationMinutes: 20,
+    description:
+        'Work through controlled mobility drills for the hips and upper back.',
+    exerciseIds: [
+      'cat_cow',
+      'hip_flexor_stretch',
+      'thoracic_rotation',
+      'glute_bridge',
+    ],
+  ),
+  _WorkoutPlan(
+    id: 'intermediate_conditioning',
+    name: 'Conditioning Circuit',
+    category: 'Conditioning',
+    level: 'Intermediate',
+    durationMinutes: 25,
+    description:
+        'A mixed circuit with steady cardio and dynamic bodyweight work.',
+    exerciseIds: [
+      'high_knees',
+      'bodyweight_squat',
+      'mountain_climber',
+      'reverse_lunge',
+    ],
+  ),
+  _WorkoutPlan(
+    id: 'advanced_strength',
+    name: 'Advanced Bodyweight Strength',
+    category: 'Strength',
+    level: 'Advanced',
+    durationMinutes: 40,
+    description: 'A challenging bodyweight session. Scale repetitions to maintain sound technique.',
+    exerciseIds: [
+      'push_up',
+      'jump_squat',
+      'reverse_lunge',
+      'plank',
+      'mountain_climber',
+    ],
+  ),
+  _WorkoutPlan(
+    id: 'advanced_cardio',
+    name: 'Cardio Performance',
+    category: 'Cardio',
+    level: 'Advanced',
+    durationMinutes: 40,
+    description:
+        'A higher-effort endurance session for experienced participants.',
+    exerciseIds: ['jogging', 'high_knees', 'cycling'],
+  ),
+  _WorkoutPlan(
+    id: 'advanced_mobility',
+    name: 'Extended Mobility Flow',
+    category: 'Mobility',
+    level: 'Advanced',
+    durationMinutes: 25,
+    description: 'A longer mobility sequence. Keep every movement controlled and pain-free.',
+    exerciseIds: [
+      'cat_cow',
+      'hip_flexor_stretch',
+      'thoracic_rotation',
+      'glute_bridge',
+    ],
+  ),
+  _WorkoutPlan(
+    id: 'advanced_conditioning',
+    name: 'Advanced Conditioning Circuit',
+    category: 'Conditioning',
+    level: 'Advanced',
+    durationMinutes: 30,
+    description:
+        'A demanding circuit combining explosive and core-focused movements.',
+    exerciseIds: ['jump_squat', 'mountain_climber', 'high_knees', 'plank'],
+  ),
 ];
 
+/// Guided workout flow that walks the user through each exercise and set.
 class _GuidedWorkoutScreen extends StatefulWidget {
   const _GuidedWorkoutScreen({
     required this.exercises,
@@ -3782,7 +5561,6 @@ class _GuidedWorkoutScreen extends StatefulWidget {
     required this.initialLogs,
     required this.isPaused,
     required this.onPauseChanged,
-    super.key,
   });
 
   final List<_Exercise> exercises;
@@ -3801,9 +5579,15 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
   static const int _restDuration = 60;
   late int _index;
   late List<Map<String, dynamic>> _logs;
-  final TextEditingController _repsController = TextEditingController(text: '10');
-  final TextEditingController _weightController = TextEditingController(text: '0');
-  final TextEditingController _durationController = TextEditingController(text: '30');
+  final TextEditingController _repsController = TextEditingController(
+    text: '10',
+  );
+  final TextEditingController _weightController = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _durationController = TextEditingController(
+    text: '30',
+  );
   Timer? _restTicker;
   int _restRemaining = 0;
   bool _saving = false;
@@ -3811,6 +5595,7 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
 
   _Exercise get _exercise => widget.exercises[_index];
 
+/// Returns the logged sets for the exercise currently selected in the guide.
   List<Map<String, dynamic>> get _currentSets {
     final entry = _logs.firstWhere(
       (item) => item['exerciseId'] == _exercise.id,
@@ -3825,7 +5610,9 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
   void initState() {
     super.initState();
     _index = widget.initialIndex.clamp(0, widget.exercises.length - 1).toInt();
-    _logs = widget.initialLogs.map((item) => Map<String, dynamic>.from(item)).toList();
+    _logs = widget.initialLogs
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
     _isPaused = widget.isPaused;
   }
 
@@ -3838,6 +5625,7 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
     super.dispose();
   }
 
+/// Saves the current guided-workout logs to the associated Firestore session.
   Future<void> _persist() async {
     await widget.session.update({
       'currentExerciseIndex': _index,
@@ -3846,6 +5634,7 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
     });
   }
 
+/// Checks a completed set against existing records and saves a new record if earned.
   Future<bool> _updatePersonalRecord({
     required bool isTimed,
     required int? reps,
@@ -3880,7 +5669,8 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
       };
 
       if (isTimed) {
-        final oldDuration = (previous['bestDurationSeconds'] as num?)?.toInt() ?? 0;
+        final oldDuration =
+            (previous['bestDurationSeconds'] as num?)?.toInt() ?? 0;
         if ((duration ?? 0) > oldDuration) {
           updated['bestDurationSeconds'] = duration;
           isNewRecord = true;
@@ -3890,7 +5680,8 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
         final oldReps = (previous['bestReps'] as num?)?.toInt() ?? -1;
         final newWeight = weight ?? 0;
         final newReps = reps ?? 0;
-        if (newWeight > oldWeight || (newWeight == oldWeight && newReps > oldReps)) {
+        if (newWeight > oldWeight ||
+            (newWeight == oldWeight && newReps > oldReps)) {
           updated['bestWeightKg'] = newWeight;
           updated['bestReps'] = newReps;
           isNewRecord = true;
@@ -3909,17 +5700,28 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
     });
   }
 
+/// Validates and records the current set before moving through the workout.
   Future<void> _completeSet() async {
     if (_saving) return;
-    final isTimed = _exercise.category == 'Cardio' || _exercise.category == 'Mobility';
+    final isTimed =
+        _exercise.category == 'Cardio' || _exercise.category == 'Mobility';
     final reps = int.tryParse(_repsController.text.trim());
     final enteredWeight = double.tryParse(_weightController.text.trim());
-    final weightKg = enteredWeight == null ? null : _enteredWeightToKg(enteredWeight);
+    final weightKg = enteredWeight == null
+        ? null
+        : _enteredWeightToKg(enteredWeight);
     final duration = int.tryParse(_durationController.text.trim());
     if ((isTimed && (duration == null || duration <= 0)) ||
-        (!isTimed && (reps == null || reps < 0 || enteredWeight == null || !enteredWeight.isFinite || enteredWeight < 0))) {
+        (!isTimed &&
+            (reps == null ||
+                reps < 0 ||
+                enteredWeight == null ||
+                !enteredWeight.isFinite ||
+                enteredWeight < 0))) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter valid non-negative repetitions and weight.')),
+        const SnackBar(
+          content: Text('Enter valid non-negative repetitions and weight.'),
+        ),
       );
       return;
     }
@@ -3931,8 +5733,14 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
       if (isTimed) 'durationSeconds': duration,
       'completedAt': Timestamp.fromDate(DateTime.now()),
     });
-    final existingIndex = _logs.indexWhere((item) => item['exerciseId'] == _exercise.id);
-    final updatedEntry = {'exerciseId': _exercise.id, 'sets': sets, 'completed': sets.length >= _targetSets};
+    final existingIndex = _logs.indexWhere(
+      (item) => item['exerciseId'] == _exercise.id,
+    );
+    final updatedEntry = {
+      'exerciseId': _exercise.id,
+      'sets': sets,
+      'completed': sets.length >= _targetSets,
+    };
     if (existingIndex >= 0) {
       _logs[existingIndex] = updatedEntry;
     } else {
@@ -3965,22 +5773,35 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
         );
       } else if (recordSyncFailed) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Set saved, but your personal record could not sync.')),
+          const SnackBar(
+            content: Text(
+              'Set saved, but your personal record could not sync.',
+            ),
+          ),
         );
       } else if (sets.length >= _targetSets) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Exercise sets completed. Move to the next exercise when ready.')),
+          const SnackBar(
+            content: Text(
+              'Exercise sets completed. Move to the next exercise when ready.',
+            ),
+          ),
         );
       }
     } catch (_) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not save this set. Check your connection and try again.')),
+        const SnackBar(
+          content: Text(
+            'Could not save this set. Check your connection and try again.',
+          ),
+        ),
       );
     }
   }
 
+/// Starts the countdown between sets or exercises.
   void _startRestTimer() {
     _restTicker?.cancel();
     _restTicker = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -3994,11 +5815,13 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
     });
   }
 
+/// Ends the current rest countdown early.
   void _skipRest() {
     _restTicker?.cancel();
     setState(() => _restRemaining = 0);
   }
 
+/// Saves progress and moves the guide to another exercise.
   Future<void> _moveTo(int nextIndex) async {
     _restTicker?.cancel();
     final safeIndex = nextIndex.clamp(0, widget.exercises.length - 1).toInt();
@@ -4014,37 +5837,51 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Progress is visible but could not be synced.')),
+          const SnackBar(
+            content: Text('Progress is visible but could not be synced.'),
+          ),
         );
       }
     }
   }
 
-  String _clock(int seconds) => '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}';
+/// Formats the rest countdown as minutes and seconds.
+  String _clock(int seconds) =>
+      '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
     final exercise = _exercise;
     final sets = _currentSets;
-    final completedExercises = _logs.where((entry) => entry['completed'] == true).length;
-    final progress = (completedExercises / widget.exercises.length).clamp(0.0, 1.0).toDouble();
+    final completedExercises = _logs
+        .where((entry) => entry['completed'] == true)
+        .length;
+    final progress = (completedExercises / widget.exercises.length)
+        .clamp(0.0, 1.0)
+        .toDouble();
     final isLast = _index == widget.exercises.length - 1;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Guided workout'),
         actions: [
-          TextButton(onPressed: () async {
-          final nextPaused = !_isPaused;
-          await widget.onPauseChanged(nextPaused);
-          if (!mounted) return;
-          setState(() => _isPaused = nextPaused);
-          if (nextPaused) {
-            _restTicker?.cancel();
-          } else if (_restRemaining > 0) {
-            _startRestTimer();
-          }
-        }, child: Text(_isPaused ? 'Resume' : 'Pause')),
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          TextButton(
+            onPressed: () async {
+              final nextPaused = !_isPaused;
+              await widget.onPauseChanged(nextPaused);
+              if (!mounted) return;
+              setState(() => _isPaused = nextPaused);
+              if (nextPaused) {
+                _restTicker?.cancel();
+              } else if (_restRemaining > 0) {
+                _startRestTimer();
+              }
+            },
+            child: Text(_isPaused ? 'Resume' : 'Pause'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
         ],
       ),
       body: SafeArea(
@@ -4052,84 +5889,183 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             if (_isPaused)
-              Card(color: Theme.of(context).colorScheme.tertiaryContainer, child: const Padding(padding: EdgeInsets.all(12), child: Row(children: [Icon(Icons.pause_circle_outline), SizedBox(width: 8), Expanded(child: Text('Workout paused. Resume when you are ready.'))]))),
+              Card(
+                color: Theme.of(context).colorScheme.tertiaryContainer,
+                child: const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.pause_circle_outline),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Workout paused. Resume when you are ready.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Exercise ${_index + 1} of ${widget.exercises.length}', style: Theme.of(context).textTheme.labelLarge),
-                Text('${(progress * 100).round()}% complete', style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  'Exercise ${_index + 1} of ${widget.exercises.length}',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                Text(
+                  '${(progress * 100).round()}% complete',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
               ],
             ),
             const SizedBox(height: 8),
-            LinearProgressIndicator(value: (_index + 1) / widget.exercises.length),
+            LinearProgressIndicator(
+              value: (_index + 1) / widget.exercises.length,
+            ),
             const SizedBox(height: 24),
-            Text(exercise.name, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              exercise.name,
+              style: Theme.of(context).textTheme.headlineMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
-            Wrap(spacing: 8, children: [
-              Chip(label: Text(exercise.category)),
-              Chip(label: Text(exercise.equipment)),
-              Chip(label: Text(exercise.level)),
-            ]),
+            Wrap(
+              spacing: 8,
+              children: [
+                Chip(label: Text(exercise.category)),
+                Chip(label: Text(exercise.equipment)),
+                Chip(label: Text(exercise.level)),
+              ],
+            ),
             const SizedBox(height: 12),
             Text(exercise.description),
             const SizedBox(height: 18),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('How to perform it', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  ...exercise.instructions.asMap().entries.map((entry) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      CircleAvatar(radius: 12, child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 12))),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(entry.value)),
-                    ]),
-                  )),
-                ]),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'How to perform it',
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    ...exercise.instructions.asMap().entries.map(
+                      (entry) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CircleAvatar(
+                              radius: 12,
+                              child: Text(
+                                '${entry.key + 1}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(child: Text(entry.value)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 18),
-            Text('Set ${sets.length + 1} of $_targetSets', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'Set ${sets.length + 1} of $_targetSets',
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 10),
-            if (exercise.category == 'Cardio' || exercise.category == 'Mobility')
+            if (exercise.category == 'Cardio' ||
+                exercise.category == 'Mobility')
               TextField(
                 controller: _durationController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Duration (seconds)', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Duration (seconds)',
+                  border: OutlineInputBorder(),
+                ),
               )
             else
-              Row(children: [
-                Expanded(child: TextField(
-                  controller: _repsController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Repetitions', border: OutlineInputBorder()),
-                )),
-                const SizedBox(width: 12),
-                Expanded(child: TextField(
-                  controller: _weightController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(labelText: 'Weight (${AppSettings.instance.weightUnit})', border: const OutlineInputBorder()),
-                )),
-              ]),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _repsController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Repetitions',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _weightController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText:
+                            'Weight (${AppSettings.instance.weightUnit})',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             const SizedBox(height: 12),
             FilledButton.icon(
-              onPressed: _isPaused || _saving || sets.length >= _targetSets ? null : _completeSet,
-              icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check),
-              label: Text(_saving ? 'Saving set...' : sets.length >= _targetSets ? 'All sets completed' : 'Complete set'),
+              onPressed: _isPaused || _saving || sets.length >= _targetSets
+                  ? null
+                  : _completeSet,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check),
+              label: Text(
+                _saving
+                    ? 'Saving set...'
+                    : sets.length >= _targetSets
+                    ? 'All sets completed'
+                    : 'Complete set',
+              ),
             ),
             if (sets.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('Completed sets', style: Theme.of(context).textTheme.titleSmall),
-              ...sets.asMap().entries.map((entry) => ListTile(
-                dense: true,
-                leading: CircleAvatar(child: Text('${entry.key + 1}')),
-                title: Text(entry.value['durationSeconds'] != null
-                    ? '${entry.value['durationSeconds']} seconds'
-                    : '${entry.value['reps'] ?? 0} reps'),
-                trailing: Text(entry.value['weightKg'] == null ? '' : _formatWeightFromKg((entry.value['weightKg'] as num).toDouble())),
-              )),
+              Text(
+                'Completed sets',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              ...sets.asMap().entries.map(
+                (entry) => ListTile(
+                  dense: true,
+                  leading: CircleAvatar(child: Text('${entry.key + 1}')),
+                  title: Text(
+                    entry.value['durationSeconds'] != null
+                        ? '${entry.value['durationSeconds']} seconds'
+                        : '${entry.value['reps'] ?? 0} reps',
+                  ),
+                  trailing: Text(
+                    entry.value['weightKg'] == null
+                        ? ''
+                        : _formatWeightFromKg(
+                            (entry.value['weightKg'] as num).toDouble(),
+                          ),
+                  ),
+                ),
+              ),
             ],
             if (_restRemaining > 0) ...[
               const SizedBox(height: 16),
@@ -4137,30 +6073,59 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
                 color: Theme.of(context).colorScheme.secondaryContainer,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Column(children: [
-                    Text('Rest', style: Theme.of(context).textTheme.titleMedium),
-                    Text(_clock(_restRemaining), style: Theme.of(context).textTheme.displayMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    TextButton.icon(onPressed: _skipRest, icon: const Icon(Icons.skip_next), label: const Text('Skip rest')),
-                  ]),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Rest',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        _clock(_restRemaining),
+                        style: Theme.of(context).textTheme.displayMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      TextButton.icon(
+                        onPressed: _skipRest,
+                        icon: const Icon(Icons.skip_next),
+                        label: const Text('Skip rest'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
             const SizedBox(height: 22),
-            Row(children: [
-              Expanded(child: OutlinedButton.icon(
-                onPressed: _index == 0 ? null : () => _moveTo(_index - 1),
-                icon: const Icon(Icons.chevron_left), label: const Text('Previous'),
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: FilledButton.icon(
-                onPressed: isLast ? () => Navigator.pop(context) : () => _moveTo(_index + 1),
-                icon: Icon(isLast ? Icons.check_circle_outline : Icons.skip_next),
-                label: Text(isLast ? 'Done' : 'Next exercise'),
-              )),
-            ]),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _index == 0 ? null : () => _moveTo(_index - 1),
+                    icon: const Icon(Icons.chevron_left),
+                    label: const Text('Previous'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: isLast
+                        ? () => Navigator.pop(context)
+                        : () => _moveTo(_index + 1),
+                    icon: Icon(
+                      isLast ? Icons.check_circle_outline : Icons.skip_next,
+                    ),
+                    label: Text(isLast ? 'Done' : 'Next exercise'),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
-            Text('Your sets and current exercise are saved as you go. You can close this screen and resume later.',
-              textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            Text(
+              'Your sets and current exercise are saved as you go. You can close this screen and resume later.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       ),
@@ -4168,6 +6133,7 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
   }
 }
 
+/// Carries optional workout summary details back from the finish dialog.
 class _WorkoutFinishDetails {
   const _WorkoutFinishDetails({
     required this.distanceKm,
@@ -4180,6 +6146,9 @@ class _WorkoutFinishDetails {
   final String notes;
 }
 
+
+/// Reusable row for presenting a feature with an icon and explanatory text.
+// ignore: unused_element
 class _FeatureRow extends StatelessWidget {
   const _FeatureRow({
     required this.icon,
@@ -4204,8 +6173,15 @@ class _FeatureRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text(subtitle, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: colors.onSurfaceVariant),
+                ),
               ],
             ),
           ),
@@ -4215,15 +6191,9 @@ class _FeatureRow extends StatelessWidget {
   }
 }
 
-
-
-
-
+/// Interactive map used during an activity to show the live route and location.
 class _LiveGpsRouteMap extends StatefulWidget {
-  const _LiveGpsRouteMap({
-    required this.points,
-    required this.currentPosition,
-  });
+  const _LiveGpsRouteMap({required this.points, required this.currentPosition});
 
   final List<Map<String, dynamic>> points;
   final Position currentPosition;
@@ -4237,17 +6207,19 @@ class _LiveGpsRouteMapState extends State<_LiveGpsRouteMap> {
   bool _followCurrentPosition = true;
   double _zoom = 16;
 
-  LatLng get _currentPoint => LatLng(
-        widget.currentPosition.latitude,
-        widget.currentPosition.longitude,
-      );
+/// Converts the current GPS position into a map coordinate.
+  LatLng get _currentPoint =>
+      LatLng(widget.currentPosition.latitude, widget.currentPosition.longitude);
 
+/// Converts stored GPS route samples into coordinates for the map line.
   List<LatLng> get _routeCoordinates => widget.points
       .where((point) => point['latitude'] is num && point['longitude'] is num)
-      .map((point) => LatLng(
-            (point['latitude'] as num).toDouble(),
-            (point['longitude'] as num).toDouble(),
-          ))
+      .map(
+        (point) => LatLng(
+          (point['latitude'] as num).toDouble(),
+          (point['longitude'] as num).toDouble(),
+        ),
+      )
       .toList(growable: false);
 
   @override
@@ -4257,11 +6229,14 @@ class _LiveGpsRouteMapState extends State<_LiveGpsRouteMap> {
   }
 
   @override
+/// Keeps the map centered on the user when live location changes and follow mode is on.
   void didUpdateWidget(covariant _LiveGpsRouteMap oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_followCurrentPosition &&
-        (oldWidget.currentPosition.latitude != widget.currentPosition.latitude ||
-            oldWidget.currentPosition.longitude != widget.currentPosition.longitude)) {
+        (oldWidget.currentPosition.latitude !=
+                widget.currentPosition.latitude ||
+            oldWidget.currentPosition.longitude !=
+                widget.currentPosition.longitude)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_followCurrentPosition) return;
         _mapController.move(_currentPoint, _zoom);
@@ -4275,6 +6250,7 @@ class _LiveGpsRouteMapState extends State<_LiveGpsRouteMap> {
     super.dispose();
   }
 
+/// Re-enables follow mode and moves the map camera to the current location.
   void _recenter() {
     setState(() => _followCurrentPosition = true);
     _mapController.move(_currentPoint, _zoom);
@@ -4323,7 +6299,11 @@ class _LiveGpsRouteMapState extends State<_LiveGpsRouteMap> {
                     point: coordinates.first,
                     width: 26,
                     height: 26,
-                    child: const Icon(Icons.trip_origin, color: Colors.green, size: 20),
+                    child: const Icon(
+                      Icons.trip_origin,
+                      color: Colors.green,
+                      size: 20,
+                    ),
                   ),
                 Marker(
                   point: _currentPoint,
@@ -4331,16 +6311,23 @@ class _LiveGpsRouteMapState extends State<_LiveGpsRouteMap> {
                   height: 42,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.18),
+                      color: Theme.of(context).colorScheme.primary
+                          .withValues(alpha: 0.18),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.navigation, color: Theme.of(context).colorScheme.primary, size: 26),
+                    child: Icon(
+                      Icons.navigation,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 26,
+                    ),
                   ),
                 ),
               ],
             ),
             RichAttributionWidget(
-              attributions: const [TextSourceAttribution('OpenStreetMap contributors')],
+              attributions: const [
+                TextSourceAttribution('OpenStreetMap contributors'),
+              ],
             ),
           ],
         ),
@@ -4355,7 +6342,9 @@ class _LiveGpsRouteMapState extends State<_LiveGpsRouteMap> {
               tooltip: 'Recenter on current location',
               onPressed: _recenter,
               icon: Icon(
-                _followCurrentPosition ? Icons.my_location : Icons.location_searching,
+                _followCurrentPosition
+                    ? Icons.my_location
+                    : Icons.location_searching,
                 color: Theme.of(context).colorScheme.primary,
               ),
             ),
@@ -4366,13 +6355,16 @@ class _LiveGpsRouteMapState extends State<_LiveGpsRouteMap> {
           bottom: 10,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
+              color: Theme.of(context).colorScheme.surface
+                  .withValues(alpha: 0.92),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               child: Text(
-                _followCurrentPosition ? 'Following location' : 'Map moved · tap locate to follow',
+                _followCurrentPosition
+                    ? 'Following location'
+                    : 'Map moved · tap locate to follow',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ),
@@ -4383,26 +6375,28 @@ class _LiveGpsRouteMapState extends State<_LiveGpsRouteMap> {
   }
 }
 
+/// Static route map used when reviewing a completed GPS activity.
 class _GpsRouteMap extends StatelessWidget {
-  const _GpsRouteMap({
-    required this.points,
-    required this.routeColor,
-  });
+  const _GpsRouteMap({required this.points, required this.routeColor});
 
   final List<Map<String, dynamic>> points;
   final Color routeColor;
 
   @override
   Widget build(BuildContext context) {
-    final coordinates = points.map((point) {
-      return LatLng(
-        (point['latitude'] as num).toDouble(),
-        (point['longitude'] as num).toDouble(),
-      );
-    }).toList(growable: false);
+    final coordinates = points
+        .map((point) {
+          return LatLng(
+            (point['latitude'] as num).toDouble(),
+            (point['longitude'] as num).toDouble(),
+          );
+        })
+        .toList(growable: false);
 
     if (coordinates.length < 2) {
-      return const Center(child: Text('Not enough route points to display a map.'));
+      return const Center(
+        child: Text('Not enough route points to display a map.'),
+      );
     }
 
     var minLatitude = coordinates.first.latitude;
@@ -4413,8 +6407,12 @@ class _GpsRouteMap extends StatelessWidget {
     for (final coordinate in coordinates.skip(1)) {
       if (coordinate.latitude < minLatitude) minLatitude = coordinate.latitude;
       if (coordinate.latitude > maxLatitude) maxLatitude = coordinate.latitude;
-      if (coordinate.longitude < minLongitude) minLongitude = coordinate.longitude;
-      if (coordinate.longitude > maxLongitude) maxLongitude = coordinate.longitude;
+      if (coordinate.longitude < minLongitude) {
+        minLongitude = coordinate.longitude;
+      }
+      if (coordinate.longitude > maxLongitude) {
+        maxLongitude = coordinate.longitude;
+      }
     }
 
     // Give stationary or nearly straight routes a little breathing room so
@@ -4468,13 +6466,21 @@ class _GpsRouteMap extends StatelessWidget {
               point: coordinates.first,
               width: 34,
               height: 34,
-              child: const Icon(Icons.location_on, color: Colors.green, size: 32),
+              child: const Icon(
+                Icons.location_on,
+                color: Colors.green,
+                size: 32,
+              ),
             ),
             Marker(
               point: coordinates.last,
               width: 34,
               height: 34,
-              child: const Icon(Icons.flag_rounded, color: Colors.red, size: 28),
+              child: const Icon(
+                Icons.flag_rounded,
+                color: Colors.red,
+                size: 28,
+              ),
             ),
           ],
         ),
@@ -4488,7 +6494,7 @@ class _GpsRouteMap extends StatelessWidget {
   }
 }
 
-
+/// Convenience helper that returns the first item or null for an empty iterable.
 extension _FirstOrNullExtension<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
