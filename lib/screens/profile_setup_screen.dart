@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../services/app_settings.dart';
+
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({
     super.key,
@@ -61,8 +63,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       text: savedName is String ? savedName : widget.initialName,
     );
     _age.text = saved['ageYears']?.toString() ?? '';
-    _height.text = saved['heightCm']?.toString() ?? '';
-    _weight.text = saved['weightKg']?.toString() ?? '';
+    final settings = AppSettings.instance;
+    final savedHeightCm = (saved['heightCm'] as num?)?.toDouble();
+    final savedWeightKg = (saved['weightKg'] as num?)?.toDouble();
+    _height.text = savedHeightCm == null
+        ? ''
+        : (settings.isMetric ? savedHeightCm : savedHeightCm / 2.54)
+            .toStringAsFixed(1);
+    _weight.text = savedWeightKg == null
+        ? ''
+        : (settings.isMetric ? savedWeightKg : savedWeightKg * 2.2046226218)
+            .toStringAsFixed(1);
     _calorieTarget.text = saved['calorieTarget']?.toString() ?? '';
 
     final savedGoal = saved['bodyGoal'];
@@ -106,8 +117,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           .set({
             'name': _name.text.trim(),
             'ageYears': int.parse(_age.text.trim()),
-            'heightCm': double.parse(_height.text.trim()),
-            'weightKg': double.parse(_weight.text.trim()),
+            'heightCm': AppSettings.instance.isMetric
+                ? double.parse(_height.text.trim())
+                : double.parse(_height.text.trim()) * 2.54,
+            'weightKg': AppSettings.instance.isMetric
+                ? double.parse(_weight.text.trim())
+                : double.parse(_weight.text.trim()) / 2.2046226218,
             'bodyGoal': _goal,
             'calorieTarget': int.tryParse(_calorieTarget.text.trim()),
           }, SetOptions(merge: true));
@@ -145,8 +160,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   void _calculateSuggestion() {
     final age = int.tryParse(_age.text.trim());
-    final height = double.tryParse(_height.text.trim());
-    final weight = double.tryParse(_weight.text.trim());
+    final heightInput = double.tryParse(_height.text.trim());
+    final weightInput = double.tryParse(_weight.text.trim());
+    final height = heightInput == null
+        ? null
+        : (AppSettings.instance.isMetric ? heightInput : heightInput * 2.54);
+    final weight = weightInput == null
+        ? null
+        : (AppSettings.instance.isMetric ? weightInput : weightInput / 2.2046226218);
     final equation = _equation;
     final activity = _activity;
 
@@ -334,9 +355,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    _measurementField(_height, 'Height', 'cm'),
+                    _measurementField(
+                      _height,
+                      'Height',
+                      AppSettings.instance.isMetric ? 'cm' : 'in',
+                    ),
                     const SizedBox(height: 16),
-                    _measurementField(_weight, 'Current weight', 'kg'),
+                    _measurementField(
+                      _weight,
+                      'Current weight',
+                      AppSettings.instance.weightUnit,
+                    ),
                     const SizedBox(height: 16),
                     _choiceField(
                       label: 'Body goal',
@@ -454,3 +483,5 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     );
   }
 }
+
+

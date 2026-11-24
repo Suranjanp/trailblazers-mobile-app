@@ -1,3 +1,4 @@
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -47,15 +48,14 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _continueAsGuest() async {
-    if (_submitting) {
-      return;
-    }
+    if (_submitting) return;
 
     FocusScope.of(context).unfocus();
     setState(() => _submitting = true);
 
     try {
       final auth = FirebaseAuth.instance;
+
       if (auth.currentUser?.isAnonymous != true) {
         await auth.signInAnonymously();
       }
@@ -97,11 +97,8 @@ class _AuthScreenState extends State<AuthScreen> {
           password: password,
         );
 
-        // Open profile setup for the new account.
         final user = credential.user;
-        if (!mounted || user == null) {
-          return;
-        }
+        if (!mounted || user == null) return;
 
         Navigator.of(context).pushAndRemoveUntil<void>(
           MaterialPageRoute<void>(
@@ -112,16 +109,17 @@ class _AuthScreenState extends State<AuthScreen> {
         );
         return;
       } else {
-        await auth.signInWithEmailAndPassword(email: email, password: password);
+        await auth.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
       }
 
       if (!mounted) return;
 
       Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
     } on FirebaseAuthException catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       final message = switch (error.code) {
         'email-already-in-use' => 'An account already uses this email.',
@@ -200,8 +198,16 @@ class _AuthScreenState extends State<AuthScreen> {
     final signUp = !_isLogin;
     final title = signUp ? 'Create Account' : 'Log In';
 
-    final screenWidth = MediaQuery.of(context).size.width;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
+    // Preserve the Trailblazer navy in light mode while using the active
+    // theme's primary color in dark mode for better contrast.
+    final actionColor =
+        isDark ? colors.primary : AppColors.navigationNavy;
+
+    final screenWidth = MediaQuery.of(context).size.width;
     final smallScreen = screenWidth < 360;
 
     final taglineSize = smallScreen ? 15.0 : 17.0;
@@ -209,7 +215,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final bodySize = smallScreen ? 12.0 : 14.0;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Stack(
         children: [
           const Positioned.fill(child: DecorativeBackground()),
@@ -228,17 +234,16 @@ class _AuthScreenState extends State<AuthScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Trailblazer logo
                         Center(
                           child: Image.asset(
-                            'assets/images/trailblazer_logo.png',
+                            'assets/images/top_icon.png',
                             height: 120,
                             fit: BoxFit.contain,
                             errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
+                              return Icon(
                                 Icons.explore,
                                 size: 90,
-                                color: AppColors.navigationNavy,
+                                color: colors.onSurface,
                               );
                             },
                           ),
@@ -251,7 +256,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             'Learn. Plan. Achieve.',
                             style: TextStyle(
                               fontSize: taglineSize,
-                              color: AppColors.textBlue,
+                              color: colors.onSurface,
                             ),
                           ),
                         ),
@@ -262,24 +267,31 @@ class _AuthScreenState extends State<AuthScreen> {
                         Container(
                           height: 45,
                           decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.actionBlue),
+                            border: Border.all(color: colors.outline),
                             borderRadius: BorderRadius.circular(35),
                           ),
                           child: Row(
                             children: [
-                              _buildTab('Log In', true),
-                              _buildTab('Sign Up', false),
+                              _buildTab(
+                                'Log In',
+                                true,
+                                AppColors.navigationNavy,
+                              ),
+                              _buildTab(
+                                'Sign Up',
+                                false,
+                                AppColors.trailblazerOrange,
+                              ),
                             ],
                           ),
                         ),
 
                         const SizedBox(height: 20),
 
-                        // Page heading
                         Text(
                           title,
                           style: TextStyle(
-                            color: AppColors.navigationNavy,
+                            color: colors.onSurface,
                             fontSize: headingSize,
                             fontWeight: FontWeight.bold,
                           ),
@@ -340,28 +352,27 @@ class _AuthScreenState extends State<AuthScreen> {
                               ? TextInputAction.next
                               : TextInputAction.done,
                           onFieldSubmitted: signUp ? null : (_) => _submit(),
-                          decoration:
-                              _inputDecoration(
-                                'Password',
-                                Icons.lock_outline,
-                              ).copyWith(
-                                suffixIcon: IconButton(
-                                  tooltip: _hidePassword
-                                      ? 'Show password'
-                                      : 'Hide password',
-                                  onPressed: () {
-                                    setState(() {
-                                      _hidePassword = !_hidePassword;
-                                    });
-                                  },
-                                  icon: Icon(
-                                    _hidePassword
-                                        ? Icons.visibility_off_outlined
-                                        : Icons.visibility_outlined,
-                                    color: AppColors.textBlue,
-                                  ),
-                                ),
+                          decoration: _inputDecoration(
+                            'Password',
+                            Icons.lock_outline,
+                          ).copyWith(
+                            suffixIcon: IconButton(
+                              tooltip: _hidePassword
+                                  ? 'Show password'
+                                  : 'Hide password',
+                              onPressed: () {
+                                setState(() {
+                                  _hidePassword = !_hidePassword;
+                                });
+                              },
+                              icon: Icon(
+                                _hidePassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                color: colors.onSurfaceVariant,
                               ),
+                            ),
+                          ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Enter your password.';
@@ -406,7 +417,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             children: [
                               Checkbox(
                                 value: _rememberMe,
-                                activeColor: AppColors.navigationNavy,
+                                activeColor: colors.primary,
                                 onChanged: (value) {
                                   setState(() {
                                     _rememberMe = value ?? false;
@@ -417,7 +428,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                 child: Text(
                                   'Remember Me',
                                   style: TextStyle(
-                                    color: AppColors.textBlue,
+                                    color: colors.onSurfaceVariant,
                                     fontSize: bodySize,
                                   ),
                                 ),
@@ -427,7 +438,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                 child: Text(
                                   'Forgot Password?',
                                   style: TextStyle(
-                                    color: AppColors.navigationNavy,
+                                    color: colors.primary,
                                     fontSize: bodySize,
                                   ),
                                 ),
@@ -443,7 +454,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           child: FilledButton(
                             onPressed: _submitting ? null : _submit,
                             style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.navigationNavy,
+                              backgroundColor: actionColor,
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(35),
@@ -480,21 +491,23 @@ class _AuthScreenState extends State<AuthScreen> {
                         // Divider
                         Row(
                           children: [
-                            const Expanded(
-                              child: Divider(color: AppColors.actionBlue),
+                            Expanded(
+                              child: Divider(color: colors.outlineVariant),
                             ),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 14),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
                               child: Text(
                                 'or',
                                 style: TextStyle(
-                                  color: AppColors.textBlue,
+                                  color: colors.onSurfaceVariant,
                                   fontSize: 16,
                                 ),
                               ),
                             ),
-                            const Expanded(
-                              child: Divider(color: AppColors.actionBlue),
+                            Expanded(
+                              child: Divider(color: colors.outlineVariant),
                             ),
                           ],
                         ),
@@ -509,8 +522,8 @@ class _AuthScreenState extends State<AuthScreen> {
                               _isLogin
                                   ? "Don't have an account? "
                                   : 'Already have an account? ',
-                              style: const TextStyle(
-                                color: AppColors.textBlue,
+                              style: TextStyle(
+                                color: colors.onSurfaceVariant,
                                 fontSize: 14,
                               ),
                             ),
@@ -531,12 +544,14 @@ class _AuthScreenState extends State<AuthScreen> {
                         const SizedBox(height: 12),
 
                         // Guest login
-                        // Guest login
                         TextButton(
-                          onPressed: _submitting ? null : _continueAsGuest,
-                          child: const Text(
+                          onPressed:
+                              _submitting ? null : _continueAsGuest,
+                          child: Text(
                             'Continue as Guest',
-                            style: TextStyle(color: AppColors.textBlue),
+                            style: TextStyle(
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
                         ),
                       ],
@@ -552,8 +567,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   // Login / Signup selector tab
-  Widget _buildTab(String title, bool loginTab) {
+  Widget _buildTab(String title, bool loginTab, Color tabColor) {
     final selected = _isLogin == loginTab;
+    final colors = Theme.of(context).colorScheme;
 
     return Expanded(
       child: GestureDetector(
@@ -561,13 +577,13 @@ class _AuthScreenState extends State<AuthScreen> {
         child: Container(
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selected ? AppColors.navigationNavy : Colors.transparent,
+            color: selected ? tabColor : Colors.transparent,
             borderRadius: BorderRadius.circular(35),
           ),
           child: Text(
             title,
             style: TextStyle(
-              color: selected ? Colors.white : AppColors.textBlue,
+              color: selected ? Colors.white : colors.onSurfaceVariant,
               fontSize: 17,
               fontWeight: FontWeight.w600,
             ),
@@ -579,19 +595,30 @@ class _AuthScreenState extends State<AuthScreen> {
 
   // Shared input styling
   InputDecoration _inputDecoration(String hint, IconData icon) {
+    final colors = Theme.of(context).colorScheme;
+
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: AppColors.textBlue, fontSize: 15),
-      prefixIcon: Icon(icon, color: AppColors.textBlue),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+      hintStyle: TextStyle(
+        color: colors.onSurfaceVariant,
+        fontSize: 15,
+      ),
+      prefixIcon: Icon(
+        icon,
+        color: colors.onSurfaceVariant,
+      ),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 15,
+      ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: const BorderSide(color: AppColors.actionBlue),
+        borderSide: BorderSide(color: colors.outline),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: const BorderSide(
-          color: AppColors.navigationNavy,
+        borderSide: BorderSide(
+          color: colors.primary,
           width: 1.5,
         ),
       ),

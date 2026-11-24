@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as calendar;
@@ -5,6 +6,7 @@ import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sig
 import 'package:test_ap_1/theme/app_colors.dart';
 
 import '../services/schedule_service.dart';
+import '../services/dashboard_calendar_cache.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -251,8 +253,53 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             : null;
         _isGoogleCalendarLoading = false;
       });
+      // Keep the Home dashboard in sync with the latest read-only import.
+      DashboardCalendarCache.instance.update(imported);
     } finally {
       client.close();
+    }
+  }
+
+  Future<void> _copyGoogleEventToSchedule(
+    Map<String, dynamic> googleEvent,
+  ) async {
+    final eventId = googleEvent['googleEventId']?.toString() ?? '';
+    final calendarId = googleEvent['googleCalendarId']?.toString() ?? '';
+    final date = googleEvent['date']?.toString() ?? '';
+    final sourceKey = '$calendarId|$eventId|$date';
+
+    final alreadyCopied = _schedule.any(
+      (entry) => entry['googleSourceKey'] == sourceKey,
+    );
+    if (alreadyCopied) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This Google Calendar event is already in Trailblazer.')),
+      );
+      return;
+    }
+
+    final seed = <String, dynamic>{
+      'name': googleEvent['name'] ?? '(No title)',
+      'location': googleEvent['location'] ?? '',
+      'date': date,
+      'startTime': googleEvent['startTime'],
+      'endTime': googleEvent['endTime'],
+      'duration': googleEvent['duration'] ?? 0,
+      'allDay': googleEvent['allDay'] == true,
+      'repeatFrequency': 'none',
+      'repeatWeekly': false,
+      'repeatYearly': false,
+      'days': <String>[],
+      'googleSourceKey': sourceKey,
+      'colorValue': _eventColors[1].toARGB32(),
+    };
+
+    await _openScheduleEditor(entry: seed);
+    if (!mounted) return;
+    if (_schedule.any((entry) => entry['googleSourceKey'] == sourceKey)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Google event copied to your Trailblazer schedule.')),
+      );
     }
   }
 
@@ -360,21 +407,48 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return [];
   }
 
-  bool _isVisibleOnSelectedDay(Map<String, dynamic> entry) {
+  bool _entryOccursOnDate(Map<String, dynamic> entry, DateTime date) {
     if (entry['entryType'] == 'todo') return false;
-    final selectedDate = _dateForDay(_selectedDay);
-    if (entry['repeatYearly'] == true) {
-      final parsed = DateTime.tryParse(entry['date']?.toString() ?? '');
-      return parsed != null &&
-          parsed.month == selectedDate.month &&
-          parsed.day == selectedDate.day;
+
+    // New entries use repeatFrequency. Older saved entries keep working via
+    // their original repeatWeekly/repeatYearly fields.
+    final frequency = entry['repeatFrequency']?.toString() ??
+        (entry['repeatYearly'] == true
+            ? 'yearly'
+            : entry['repeatWeekly'] == false
+                ? 'none'
+                : 'weekly');
+    final selected = _dateOnly(date);
+
+    // Legacy weekly entries intentionally have no anchor date.
+    if (frequency == 'weekly') {
+      return _daysForEntry(entry).contains(_weekdays[selected.weekday - 1]);
     }
-    if (entry['repeatWeekly'] != false) {
-      return _daysForEntry(entry).contains(_selectedDay);
+
+    final startDate = DateTime.tryParse(entry['date']?.toString() ?? '');
+    if (startDate == null) return false;
+    final anchor = _dateOnly(startDate);
+    if (selected.isBefore(anchor)) return false;
+    final repeatUntil = DateTime.tryParse(entry['repeatUntil']?.toString() ?? '');
+    if (repeatUntil != null && selected.isAfter(_dateOnly(repeatUntil))) {
+      return false;
     }
-    final parsed = DateTime.tryParse(entry['date']?.toString() ?? '');
-    return parsed != null && _dateOnly(parsed) == selectedDate;
+
+    switch (frequency) {
+      case 'daily':
+        return true;
+      case 'monthly':
+        return selected.day == anchor.day;
+      case 'yearly':
+        return selected.month == anchor.month && selected.day == anchor.day;
+      case 'none':
+      default:
+        return selected == anchor;
+    }
   }
+
+  bool _isVisibleOnSelectedDay(Map<String, dynamic> entry) =>
+      _entryOccursOnDate(entry, _dateForDay(_selectedDay));
 
   List<MapEntry<int, Map<String, dynamic>>> _todosForSelectedDay() {
     final selectedDate = _dateForDay(_selectedDay);
@@ -425,7 +499,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   const Spacer(),
                   Text(
                     '$importance / 5',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF263746)),
                   ),
                 ],
               ),
@@ -524,7 +598,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     item['name']?.toString() ?? 'Task',
                     style: TextStyle(
                       decoration: completed ? TextDecoration.lineThrough : null,
-                      color: completed ? Colors.grey : null,
+                      color: completed ? Theme.of(context).colorScheme.onSurfaceVariant : null,
                     ),
                   ),
                   subtitle: Text('Importance: $importance / 5'),
@@ -641,10 +715,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ? const TimeOfDay(hour: 10, minute: 0)
         : TimeOfDay(hour: oldEnd ~/ 60, minute: oldEnd % 60);
 
-    bool repeatWeekly = entry == null
-        ? true
-        : entry['repeatWeekly'] != false && entry['repeatYearly'] != true;
-    bool repeatYearly = entry?['repeatYearly'] == true;
+    String repeatFrequency = entry == null
+        ? 'weekly'
+        : entry['repeatFrequency']?.toString() ??
+            (entry['repeatYearly'] == true
+                ? 'yearly'
+                : entry['repeatWeekly'] == false
+                    ? 'none'
+                    : 'weekly');
+    bool allDay = entry?['allDay'] == true;
     List<String> selectedDays = entry == null
         ? [_selectedDay]
         : _daysForEntry(entry);
@@ -654,6 +733,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           entry?['date']?.toString() ?? '',
         ) ??
         _dateForDay(_selectedDay);
+    DateTime? repeatUntil = DateTime.tryParse(
+      entry?['repeatUntil']?.toString() ?? '',
+    );
 
     int selectedColor = (entry?['colorValue'] as num?)?.toInt() ??
         _eventColors.first.toARGB32();
@@ -697,44 +779,53 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           border: OutlineInputBorder(),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Start and end time',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      const SizedBox(height: 12),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('All-day event'),
+                        value: allDay,
+                        onChanged: (value) => setDialogState(() => allDay = value),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              icon: const Icon(Icons.access_time),
-                              label: Text(startTime.format(context)),
-                              onPressed: () => _pickTime(
-                                dialogContext: dialogContext,
-                                initial: startTime,
-                                onPicked: (time) => setDialogState(
-                                  () => startTime = time,
+                      if (!allDay) ...[
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Start and end time',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.access_time),
+                                label: Text(startTime.format(context)),
+                                onPressed: () => _pickTime(
+                                  dialogContext: dialogContext,
+                                  initial: startTime,
+                                  onPicked: (time) => setDialogState(
+                                    () => startTime = time,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              icon: const Icon(Icons.flag_outlined),
-                              label: Text(endTime.format(context)),
-                              onPressed: () => _pickTime(
-                                dialogContext: dialogContext,
-                                initial: endTime,
-                                onPicked: (time) => setDialogState(
-                                  () => endTime = time,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.flag_outlined),
+                                label: Text(endTime.format(context)),
+                                onPressed: () => _pickTime(
+                                  dialogContext: dialogContext,
+                                  initial: endTime,
+                                  onPicked: (time) => setDialogState(
+                                    () => endTime = time,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      if (duration > 0) ...[
+                          ],
+                        ),
+                      ],
+                      if (!allDay && duration > 0) ...[
                         const SizedBox(height: 6),
                         Text(
                           'Duration: ${_formatMinutes(duration)}',
@@ -742,28 +833,61 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Repeat weekly'),
-                        subtitle: const Text('Repeat on selected weekdays.'),
-                        value: repeatWeekly,
-                        onChanged: (value) => setDialogState(() {
-                          repeatWeekly = value;
-                          if (value) repeatYearly = false;
-                        }),
+                      DropdownButtonFormField<String>(
+                        initialValue: repeatFrequency,
+                        decoration: const InputDecoration(
+                          labelText: 'Repeat',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'none', child: Text('Does not repeat')),
+                          DropdownMenuItem(value: 'daily', child: Text('Daily')),
+                          DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+                          DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                          DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setDialogState(() => repeatFrequency = value);
+                        },
                       ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Repeat yearly'),
-                        subtitle: const Text('For birthdays and anniversaries.'),
-                        value: repeatYearly,
-                        onChanged: (value) => setDialogState(() {
-                          repeatYearly = value;
-                          if (value) repeatWeekly = false;
-                        }),
-                      ),
+                      if (repeatFrequency != 'none') ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                repeatUntil == null
+                                    ? 'No end date'
+                                    : 'Ends ${repeatUntil!.month}/${repeatUntil!.day}/${repeatUntil!.year}',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                  context: dialogContext,
+                                  initialDate: repeatUntil ?? selectedDate,
+                                  firstDate: selectedDate,
+                                  lastDate: DateTime(2100),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() => repeatUntil = picked);
+                                }
+                              },
+                              child: Text(repeatUntil == null ? 'Set end date' : 'Change'),
+                            ),
+                            if (repeatUntil != null)
+                              IconButton(
+                                tooltip: 'Remove end date',
+                                onPressed: () => setDialogState(() => repeatUntil = null),
+                                icon: const Icon(Icons.close),
+                              ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 8),
-                      if (repeatWeekly) ...[
+                      if (repeatFrequency == 'weekly') ...[
                         const Text(
                           'Repeat on',
                           style: TextStyle(fontWeight: FontWeight.bold),
@@ -793,7 +917,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         ),
                       ] else ...[
                         const Text(
-                          'Date',
+                          'Start date',
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
@@ -838,7 +962,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                 border: Border.all(
                                   color: selected
                                       ? AppColors.navigationNavy
-                                      : Colors.black26,
+                                      : Theme.of(context).colorScheme.outline.withValues(alpha: 0.45),
                                   width: selected ? 3 : 1,
                                 ),
                               ),
@@ -875,7 +999,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       );
                       return;
                     }
-                    if (duration <= 0) {
+                    if (!allDay && duration <= 0) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
                         const SnackBar(
                           content: Text('End time must be after start time.'),
@@ -883,7 +1007,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       );
                       return;
                     }
-                    if (repeatWeekly && selectedDays.isEmpty) {
+                    if (repeatFrequency == 'weekly' && selectedDays.isEmpty) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
                         const SnackBar(
                           content: Text('Select at least one weekday.'),
@@ -903,17 +1027,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       // Keep duration for compatibility with older entries.
                       'duration': duration,
                       // Keep day for compatibility with the original format.
-                      'day': repeatWeekly ? selectedDays.first : _weekdays[
-                        selectedDate.weekday - 1
-                      ],
-                      'days': repeatWeekly ? selectedDays : <String>[],
-                      'repeatWeekly': repeatWeekly,
-                      'repeatYearly': repeatYearly,
-                      'date': repeatWeekly
+                      'day': repeatFrequency == 'weekly'
+                          ? selectedDays.first
+                          : _weekdays[selectedDate.weekday - 1],
+                      'days': repeatFrequency == 'weekly' ? selectedDays : <String>[],
+                      'repeatFrequency': repeatFrequency,
+                      'repeatWeekly': repeatFrequency == 'weekly',
+                      'repeatYearly': repeatFrequency == 'yearly',
+                      'date': _dateOnly(selectedDate).toIso8601String(),
+                      'repeatUntil': repeatFrequency == 'none' || repeatUntil == null
                           ? null
-                          : _dateOnly(selectedDate).toIso8601String(),
-                      'startTime': _timeToStorage(startTime),
-                      'endTime': _timeToStorage(endTime),
+                          : _dateOnly(repeatUntil!).toIso8601String(),
+                      'allDay': allDay,
+                      'startTime': allDay ? null : _timeToStorage(startTime),
+                      'endTime': allDay ? null : _timeToStorage(endTime),
+                      'googleSourceKey': entry?['googleSourceKey'],
                       'colorValue': selectedColor,
                     });
                   },
@@ -979,18 +1107,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             if (dayNumber < 1 || dayNumber > daysInMonth) return const SizedBox.shrink();
             final date = DateTime(_weekStart.year, _weekStart.month, dayNumber);
             final isSelected = _dateOnly(selected) == date;
-            final hasEntries = _googleEventOccursOn(date) || _schedule.any((entry) {
-              if (entry['entryType'] == 'todo') return false;
-              if (entry['repeatYearly'] == true) {
-                final d = DateTime.tryParse(entry['date']?.toString() ?? '');
-                return d != null && d.month == date.month && d.day == date.day;
-              }
-              if (entry['repeatWeekly'] == true) {
-                return _daysForEntry(entry).contains(_weekdays[date.weekday - 1]);
-              }
-              final d = DateTime.tryParse(entry['date']?.toString() ?? '');
-              return d != null && _dateOnly(d) == date;
-            });
+            final hasEntries = _googleEventOccursOn(date) ||
+                _schedule.any((entry) => _entryOccursOnDate(entry, date));
             return InkWell(
               onTap: () {
                 setState(() {
@@ -1009,7 +1127,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text('$dayNumber', style: TextStyle(
-                      color: isSelected ? Colors.white : AppColors.navigationNavy,
+                      color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     )),
                     if (hasEntries) Container(
@@ -1065,8 +1183,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      const Text('Tap to view month',
-                          style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      Text('Tap to view month',
+                          style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                     ],
                   ),
                 ),
@@ -1123,7 +1241,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             fontWeight: FontWeight.w600,
                             color: selected
                                 ? Colors.white
-                                : const Color(0xFF5D6670),
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 5),
@@ -1134,7 +1252,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             fontWeight: FontWeight.bold,
                             color: selected
                                 ? Colors.white
-                                : AppColors.navigationNavy,
+                                : Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                       ],
@@ -1163,11 +1281,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final cardColor = colorValue == null
         ? _eventColors.first
         : Color(colorValue);
-    final isRepeating = item['repeatWeekly'] == true;
-    final isYearly = item['repeatYearly'] == true;
+    final frequency = item['repeatFrequency']?.toString() ??
+        (item['repeatYearly'] == true
+            ? 'yearly'
+            : item['repeatWeekly'] == false
+                ? 'none'
+                : 'weekly');
     final isGoogleEvent = item['externalGoogle'] == true;
     final googleCalendarName =
         item['googleCalendarName']?.toString() ?? 'Google Calendar';
+    final repeatLabel = frequency == 'none'
+        ? ''
+        : '\nRepeats ${frequency == 'weekly' ? 'weekly' : frequency}';
 
     final timeText = item['allDay'] == true
         ? 'All day'
@@ -1181,7 +1306,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.black.withValues(alpha: 0.04)),
+        side: BorderSide(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.25)),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
@@ -1192,22 +1317,38 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ),
         title: Text(
           title,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF263746)),
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
             '$timeText${location.isEmpty ? '' : '\n$location'}'
-            '${isGoogleEvent ? '\n$googleCalendarName' : isRepeating ? '\nRepeats weekly' : isYearly ? '\nRepeats yearly' : ''}',
+            '${isGoogleEvent ? '\n$googleCalendarName' : repeatLabel}',
           ),
         ),
         isThreeLine: true,
         trailing: isGoogleEvent
-            ? const Padding(
-                padding: EdgeInsets.only(right: 12),
-                child: Tooltip(
-                  message: 'Imported read-only from Google Calendar',
-                  child: Icon(Icons.lock_outline, color: Color(0xFF4285F4)),
+            ? PopupMenuButton<String>(
+                tooltip: 'Google event options',
+                onSelected: (value) {
+                  if (value == 'copy') _copyGoogleEventToSchedule(item);
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'copy',
+                    child: ListTile(
+                      leading: Icon(Icons.copy_outlined),
+                      title: Text('Copy to Trailblazer'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+                child: const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Tooltip(
+                    message: 'Imported read-only · Tap to copy',
+                    child: Icon(Icons.copy_outlined, color: Color(0xFF4285F4)),
+                  ),
                 ),
               )
             : PopupMenuButton<String>(
@@ -1249,7 +1390,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     _todosForSelectedDay();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F9),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -1359,3 +1500,5 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 }
+
+
