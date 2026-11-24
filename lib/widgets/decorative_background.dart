@@ -1,73 +1,83 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_colors.dart';
 
+/// Shared Trailblazer decorative background.
+/// The full canvas is explicitly filled with the active scaffold color so
+/// transparent areas cannot reveal a light system/default background in dark mode.
 class DecorativeBackground extends StatelessWidget {
   const DecorativeBackground({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final background = theme.scaffoldBackgroundColor;
+    final isDark = theme.brightness == Brightness.dark;
 
-    return Stack(
-      children: [
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 120,
-          child: const CustomPaint(
-            painter: TopWavePainter(),
+    return ColoredBox(
+      color: background,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 120,
+            child: CustomPaint(
+              painter: TopWavePainter(isDark, background),
+            ),
           ),
-        ),
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 120,
-          child: const CustomPaint(
-            painter: BottomWavePainter(),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 120,
+            child: CustomPaint(
+              painter: BottomWavePainter(isDark, background),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-
-
-
 class TopWavePainter extends CustomPainter {
-  const TopWavePainter();
+  const TopWavePainter(this._isDark, this._background);
+
+  final bool _isDark;
+  final Color _background;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Save the original canvas state.
     canvas.save();
-
-    // Flip the canvas across both the X and Y axes.
     canvas.translate(size.width, size.height);
     canvas.scale(-1, -1);
-
-    // Reuse the exact bottom-right design.
-    const BottomWavePainter().paint(canvas, size);
-
-    // Restore the original canvas state.
+    BottomWavePainter(_isDark, _background).paint(canvas, size);
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant TopWavePainter oldDelegate) => false;
+  bool shouldRepaint(covariant TopWavePainter oldDelegate) {
+    return oldDelegate._isDark != _isDark ||
+        oldDelegate._background != _background;
+  }
 }
 
-
-
 class BottomWavePainter extends CustomPainter {
-  const BottomWavePainter();
+  const BottomWavePainter(this._isDark, this._background);
+
+  final bool _isDark;
+  final Color _background;
 
   @override
   void paint(Canvas canvas, Size size) {
     final navy = Paint()..color = AppColors.navigationNavy;
     final orange = Paint()..color = AppColors.trailblazerOrange;
-    final pale = Paint()..color = const Color(0xFFF0F3FA);
+    // Use the exact page background for the pale wave. This avoids a separate
+    // gray/blue patch appearing behind the form in either theme.
+    final pale = Paint()..color = _background;
 
     final palePath = Path()
       ..moveTo(size.width, 0)
@@ -112,5 +122,8 @@ class BottomWavePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant BottomWavePainter oldDelegate) => false;
+  bool shouldRepaint(covariant BottomWavePainter oldDelegate) {
+    return oldDelegate._isDark != _isDark ||
+        oldDelegate._background != _background;
+  }
 }

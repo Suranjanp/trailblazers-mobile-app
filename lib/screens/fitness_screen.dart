@@ -12,6 +12,21 @@ import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../services/health_connect_service.dart';
+import '../services/app_settings.dart';
+
+double _displayWeightFromKg(double kilograms) =>
+    AppSettings.instance.isMetric ? kilograms : kilograms * 2.2046226218;
+
+double _enteredWeightToKg(double displayedWeight) =>
+    AppSettings.instance.isMetric ? displayedWeight : displayedWeight / 2.2046226218;
+
+String _formatWeightFromKg(double kilograms, {int decimals = 1}) {
+  final value = _displayWeightFromKg(kilograms);
+  final label = value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(decimals);
+  return '$label ${AppSettings.instance.weightUnit}';
+}
 
 class FitnessScreen extends StatefulWidget {
   const FitnessScreen({super.key});
@@ -116,9 +131,26 @@ class _FitnessScreenState extends State<FitnessScreen> {
   @override
   void initState() {
     super.initState();
+    AppSettings.instance.addListener(_onAppSettingsChanged);
     _restoreActiveWorkout();
     _initializeHealthConnect();
   }
+
+  void _onAppSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  String _distanceText(double kilometers, {int decimals = 2}) =>
+      AppSettings.instance.formatDistanceFromKm(kilometers, decimals: decimals);
+
+  String _speedText(double kilometersPerHour, {int decimals = 1}) =>
+      AppSettings.instance.formatSpeedFromKmh(kilometersPerHour, decimals: decimals);
+
+  String _paceText(double secondsPerKm) =>
+      AppSettings.instance.formatPaceFromSecondsPerKm(secondsPerKm);
+
+  String _elevationText(double meters, {int decimals = 0}) =>
+      AppSettings.instance.formatElevationFromMeters(meters, decimals: decimals);
 
   Future<void> _initializeHealthConnect() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
@@ -221,6 +253,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
 
   @override
   void dispose() {
+    AppSettings.instance.removeListener(_onAppSettingsChanged);
     _ticker?.cancel();
     _gpsSubscription?.cancel();
     _elapsedSecondsNotifier.dispose();
@@ -509,10 +542,19 @@ class _FitnessScreenState extends State<FitnessScreen> {
   }
 
   String _formatGpsDistance() {
-    final km = _gpsDistanceMeters / 1000;
-    return km < 1
-        ? '${_gpsDistanceMeters.toStringAsFixed(0)} m'
-        : '${km.toStringAsFixed(2)} km';
+    final settings = AppSettings.instance;
+    final kilometers = _gpsDistanceMeters / 1000;
+
+    if (settings.isMetric) {
+      return kilometers < 1
+          ? '${_gpsDistanceMeters.toStringAsFixed(0)} m'
+          : _distanceText(kilometers);
+    }
+
+    final miles = settings.displayDistanceFromKm(kilometers);
+    return miles < 0.1
+        ? '${(_gpsDistanceMeters * 3.28084).toStringAsFixed(0)} ft'
+        : _distanceText(kilometers);
   }
 
   Future<void> _startWorkout(String type, {Map<String, dynamic> sessionData = const {}}) async {
@@ -573,7 +615,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
 
     final distanceController = TextEditingController(
       text: _activeWorkout?['gpsTracking'] == true && _gpsDistanceMeters > 0
-          ? (_gpsDistanceMeters / 1000).toStringAsFixed(3)
+          ? AppSettings.instance
+              .displayDistanceFromKm(_gpsDistanceMeters / 1000)
+              .toStringAsFixed(3)
           : '',
     );
     final caloriesController = TextEditingController();
@@ -593,10 +637,10 @@ class _FitnessScreenState extends State<FitnessScreen> {
               TextField(
                 controller: distanceController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Distance (optional)',
-                  suffixText: 'km',
-                  border: OutlineInputBorder(),
+                  suffixText: AppSettings.instance.distanceUnit,
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -645,7 +689,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
               Navigator.pop(
                 dialogContext,
                 _WorkoutFinishDetails(
-                  distanceKm: distance,
+                  distanceKm: distance == null
+                      ? null
+                      : AppSettings.instance.enteredDistanceToKm(distance),
                   calories: calories,
                   notes: notesController.text.trim(),
                 ),
@@ -732,7 +778,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
         final screenHeight = MediaQuery.of(context).size.height;
 
         return SizedBox(
-          height: screenHeight * 0.65,
+          height: screenHeight * 0.78,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
             child: Column(
@@ -742,7 +788,28 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   'Choose a workout',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+                Text('GPS activities', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(context, 'gps:Walking'),
+                    icon: const Icon(Icons.directions_walk), label: const Text('Walk'),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(context, 'gps:Running'),
+                    icon: const Icon(Icons.directions_run), label: const Text('Run'),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(context, 'gps:Cycling'),
+                    icon: const Icon(Icons.directions_bike), label: const Text('Cycle'),
+                  )),
+                ]),
+                const SizedBox(height: 14),
+                Text('Other workouts', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
                 Expanded(
                   child: GridView.builder(
                     itemCount: _workoutTypes.length,
@@ -789,7 +856,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
     );
 
     if (selectedType != null && mounted) {
-      await _startWorkout(selectedType);
+      if (selectedType.startsWith('gps:')) {
+        await _startGpsActivity(selectedType.substring(4));
+      } else {
+        await _startWorkout(selectedType);
+      }
     }
   }
 
@@ -890,6 +961,14 @@ class _FitnessScreenState extends State<FitnessScreen> {
           _buildHealthConnectCard(context),
           const SizedBox(height: 14),
 
+          if (_activeWorkoutId != null) ...[
+            _buildActiveWorkoutCard(context),
+            const SizedBox(height: 14),
+          ] else ...[
+            _buildStartWorkoutCard(context),
+            const SizedBox(height: 14),
+          ],
+
           SegmentedButton<String>(
             segments: const [
               ButtonSegment(value: 'Train', label: Text('Train'), icon: Icon(Icons.fitness_center)),
@@ -902,19 +981,10 @@ class _FitnessScreenState extends State<FitnessScreen> {
           ),
           const SizedBox(height: 14),
           if (_fitnessTab == 'Train') ...[
-            _buildPersonalTrainingSection(context),
-            const SizedBox(height: 18),
-            _buildTrainingProgramsSection(context),
-            const SizedBox(height: 18),
-            _buildExerciseLibrarySection(context),
-            const SizedBox(height: 18),
-            _buildCustomWorkoutsSection(context),
-            const SizedBox(height: 14),
-            if (_activeWorkoutId == null) _buildGpsActivityCard(context),
-            if (_activeWorkoutId != null)
-              _buildActiveWorkoutCard(context)
-            else
-              _buildStartWorkoutCard(context),
+            _buildExpandableSection(context, title: 'Personal training', subtitle: 'Goals and coaching preferences', icon: Icons.track_changes, child: _buildPersonalTrainingSection(context), initiallyExpanded: true),
+            _buildExpandableSection(context, title: 'Training programs', subtitle: 'Structured plans and progression', icon: Icons.calendar_month, child: _buildTrainingProgramsSection(context)),
+            _buildExpandableSection(context, title: 'Exercise library', subtitle: 'Browse and add exercises', icon: Icons.menu_book, child: _buildExerciseLibrarySection(context)),
+            _buildExpandableSection(context, title: 'Custom workouts', subtitle: 'Your saved routines', icon: Icons.playlist_add_check, child: _buildCustomWorkoutsSection(context)),
           ] else ...[
             Row(
               children: [
@@ -964,33 +1034,70 @@ class _FitnessScreenState extends State<FitnessScreen> {
                       const SizedBox(width: 8),
                       Expanded(child: _summaryCard(context, Icons.timer_outlined, 'Time', _formatDuration(totalSeconds))),
                       const SizedBox(width: 8),
-                      Expanded(child: _summaryCard(context, Icons.route_outlined, 'Distance', '${totalDistance.toStringAsFixed(1)} km')),
+                      Expanded(child: _summaryCard(context, Icons.route_outlined, 'Distance', _distanceText(totalDistance, decimals: 1))),
                     ]),
-                    const SizedBox(height: 10),
-                    if (today.isEmpty)
-                      Card(elevation: 0, color: colors.surfaceContainerLow, child: const Padding(
-                        padding: EdgeInsets.all(18),
-                        child: Center(child: Text('No completed workouts today yet.')),
-                      ))
-                    else
-                      ...today.take(10).map((doc) => _workoutTile(context, doc.data())),
+                    const SizedBox(height: 8),
+                    Card(
+                      elevation: 0,
+                      color: colors.surfaceContainerLow,
+                      child: ExpansionTile(
+                        key: const PageStorageKey<String>('fitness_today_sessions'),
+                        leading: const Icon(Icons.list_alt),
+                        title: Text(today.isEmpty ? 'Today’s session details' : 'View today’s sessions'),
+                        subtitle: Text(today.isEmpty ? 'No completed workouts yet' : '${today.length} completed session${today.length == 1 ? '' : 's'}'),
+                        children: today.isEmpty
+                            ? const [Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text('Completed workouts will appear here.'),
+                              )]
+                            : today.take(10).map((doc) => _workoutTile(context, doc.data())).toList(),
+                      ),
+                    ),
                   ],
                 );
               },
             ),
             const SizedBox(height: 18),
-            _buildGpsRouteHistorySection(context),
+            _buildExpandableSection(context, title: 'GPS routes', subtitle: 'Recorded routes and activity details', icon: Icons.route, child: _buildGpsRouteHistorySection(context)),
             const SizedBox(height: 18),
-            _buildGpsGoalsAndStatsSection(context),
+            _buildExpandableSection(context, title: 'GPS goals & stats', subtitle: 'Weekly distance and activity targets', icon: Icons.flag_outlined, child: _buildGpsGoalsAndStatsSection(context)),
             const SizedBox(height: 18),
-            _buildTrainingInsightsSection(context),
+            _buildExpandableSection(context, title: 'Training insights', subtitle: 'Workout patterns and coaching insights', icon: Icons.insights, child: _buildTrainingInsightsSection(context)),
             const SizedBox(height: 18),
-            _buildPersonalRecordsSection(context),
+            _buildExpandableSection(context, title: 'Personal records', subtitle: 'Best lifts and exercise milestones', icon: Icons.emoji_events_outlined, child: _buildPersonalRecordsSection(context)),
             const SizedBox(height: 18),
-            _buildPerformanceTrendsSection(context),
+            _buildExpandableSection(context, title: 'Performance trends', subtitle: 'Track strength and workout progress', icon: Icons.trending_up, child: _buildPerformanceTrendsSection(context)),
           ],
 
         ],
+      ),
+    );
+  }
+
+  Widget _buildExpandableSection(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Widget child,
+    bool initiallyExpanded = false,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 0,
+      color: colors.surfaceContainerLow,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        key: PageStorageKey<String>('fitness_history_section_$title'),
+        leading: Icon(icon, color: colors.primary),
+        title: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        subtitle: Text(subtitle),
+        initiallyExpanded: initiallyExpanded,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        children: [child],
       ),
     );
   }
@@ -1051,7 +1158,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                       context,
                       icon: Icons.route_rounded,
                       label: 'Walking distance',
-                      value: '${(_todayWalkingDistanceKm ?? 0).toStringAsFixed(2)} km',
+                      value: _distanceText(_todayWalkingDistanceKm ?? 0),
                     ),
                   ),
                 ],
@@ -1380,7 +1487,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 ],
               ),
               Center(child: Text(_isWorkoutPaused ? 'GPS paused' : (_currentGpsPosition == null ? 'Acquiring GPS signal…' : 'GPS tracking active'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onSecondaryContainer))),
-              Center(child: Text('Elevation gain  ${_gpsElevationGainMeters.toStringAsFixed(0)} m', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colors.onSecondaryContainer))),
+              Center(child: Text('Elevation gain  ${_elevationText(_gpsElevationGainMeters)}', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colors.onSecondaryContainer))),
               if (_gpsStatusMessage != null) Center(child: Text(_gpsStatusMessage!, style: TextStyle(color: colors.error, fontSize: 12))),
               const SizedBox(height: 14),
               ClipRRect(
@@ -1419,11 +1526,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     metricLabel = isCycling ? 'Avg speed' : 'Avg pace';
                   } else if (isCycling) {
                     final speed = distanceKm / (elapsed / 3600);
-                    metricValue = '${speed.toStringAsFixed(1)} km/h';
+                    metricValue = _speedText(speed);
                     metricLabel = 'Avg speed';
                   } else {
                     final paceSeconds = (elapsed / distanceKm).round();
-                    metricValue = '${paceSeconds ~/ 60}:${(paceSeconds % 60).toString().padLeft(2, '0')} /km';
+                    metricValue = _paceText(paceSeconds.toDouble());
                     metricLabel = 'Avg pace';
                   }
                   return Row(
@@ -1479,7 +1586,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
       elevation: 0,
       color: colors.surfaceContainerLow,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         child: Column(
           children: [
             Icon(icon, color: colors.primary),
@@ -1501,7 +1608,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
     final calories = (data['calories'] as num?)?.toInt();
     final details = <String>[
       _formatDuration(duration),
-      if (distance != null) '${distance.toStringAsFixed(2)} km',
+      if (distance != null) _distanceText(distance),
       if (calories != null) '$calories kcal',
     ].join(' · ');
 
@@ -1773,7 +1880,10 @@ class _FitnessScreenState extends State<FitnessScreen> {
           ));
         }
 
-        final sessions = (snapshot.data?.docs ?? []).map((doc) => doc.data()).where((data) {
+        final sessions = (snapshot.data?.docs ?? []).map((doc) => <String, dynamic>{
+          ...doc.data(),
+          '_documentId': doc.id,
+        }).where((data) {
           return data['gpsTracking'] == true && data['status'] == 'completed';
         }).toList();
         final filtered = sessions.where((data) {
@@ -1816,8 +1926,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
 
         String paceLabel(double secondsPerKm) {
           if (!secondsPerKm.isFinite) return '—';
-          final total = secondsPerKm.round();
-          return '${total ~/ 60}:${(total % 60).toString().padLeft(2, '0')} /km';
+          return _paceText(secondsPerKm);
         }
 
         String dateLabel(Map<String, dynamic> data) {
@@ -1870,6 +1979,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
               Text('GPS personal bests', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               GridView.count(
+                key: const PageStorageKey<String>('fitness_gps_route_personal_bests_grid'),
                 crossAxisCount: 2,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -1877,10 +1987,10 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 crossAxisSpacing: 8,
                 childAspectRatio: 1.6,
                 children: [
-                  _summaryCard(context, Icons.route, 'Longest walk', bestDistance(walking) > 0 ? '${bestDistance(walking).toStringAsFixed(2)} km' : '—'),
-                  _summaryCard(context, Icons.directions_run, 'Longest run', bestDistance(running) > 0 ? '${bestDistance(running).toStringAsFixed(2)} km' : '—'),
+                  _summaryCard(context, Icons.route, 'Longest walk', bestDistance(walking) > 0 ? _distanceText(bestDistance(walking)) : '—'),
+                  _summaryCard(context, Icons.directions_run, 'Longest run', bestDistance(running) > 0 ? _distanceText(bestDistance(running)) : '—'),
                   _summaryCard(context, Icons.speed, 'Best run pace', paceLabel(bestRunPace)),
-                  _summaryCard(context, Icons.directions_bike, 'Top cycling speed', bestCycleSpeed > 0 ? '${bestCycleSpeed.toStringAsFixed(1)} km/h' : '—'),
+                  _summaryCard(context, Icons.directions_bike, 'Top cycling speed', bestCycleSpeed > 0 ? _speedText(bestCycleSpeed) : '—'),
                 ],
               ),
               const SizedBox(height: 16),
@@ -1926,18 +2036,21 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     : activity == 'Cycling'
                         ? Icons.directions_bike
                         : Icons.directions_walk;
+                final routeId = data['_documentId'] as String? ??
+                    '${activity}_${dateLabel(data)}_${km}_$seconds';
                 return Card(
                   elevation: 0,
                   color: colors.surfaceContainerLow,
                   margin: const EdgeInsets.only(bottom: 8),
                   clipBehavior: Clip.antiAlias,
                   child: ExpansionTile(
+                    key: PageStorageKey<String>('fitness_gps_route_$routeId'),
                     leading: CircleAvatar(
                       backgroundColor: colors.primaryContainer,
                       child: Icon(icon, color: colors.onPrimaryContainer),
                     ),
                     title: Text(activity, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('${dateLabel(data)}\n${km.toStringAsFixed(2)} km · ${_formatDuration(seconds)}'),
+                    subtitle: Text('${dateLabel(data)}\n${_distanceText(km)} · ${_formatDuration(seconds)}'),
                     childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
                     children: [
                       if (points.length >= 2) ...[
@@ -1971,7 +2084,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                       ],
                       Row(
                         children: [
-                          Expanded(child: _summaryCard(context, Icons.route, 'Distance', '${km.toStringAsFixed(2)} km')),
+                          Expanded(child: _summaryCard(context, Icons.route, 'Distance', _distanceText(km))),
                           const SizedBox(width: 8),
                           Expanded(child: _summaryCard(context, Icons.timer_outlined, 'Duration', _formatDuration(seconds))),
                         ],
@@ -1979,7 +2092,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Expanded(child: _summaryCard(context, Icons.terrain, 'Elevation gain', '${elevationGain.toStringAsFixed(0)} m')),
+                          Expanded(child: _summaryCard(context, Icons.terrain, 'Elevation gain', _elevationText(elevationGain))),
                           const SizedBox(width: 8),
                           Expanded(child: _summaryCard(context, Icons.place_outlined, 'GPS points', '${points.length}')),
                         ],
@@ -1990,7 +2103,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                           if (activity == 'Running' && pace != null)
                             Expanded(child: _summaryCard(context, Icons.speed, 'Average pace', paceLabel(pace)))
                           else if (activity == 'Cycling' && speed != null)
-                            Expanded(child: _summaryCard(context, Icons.speed, 'Average speed', '${speed.toStringAsFixed(1)} km/h'))
+                            Expanded(child: _summaryCard(context, Icons.speed, 'Average speed', _speedText(speed)))
                           else
                             Expanded(child: _summaryCard(context, Icons.timer, 'Average pace', pace == null ? '—' : paceLabel(pace))),
                         ],
@@ -1999,7 +2112,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                         const SizedBox(height: 14),
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: Text('Automatic kilometer splits', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                          child: Text('Automatic distance splits', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
                         ),
                         const SizedBox(height: 6),
                         ...splits.map((split) {
@@ -2014,7 +2127,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                             child: Row(
                               children: [
                                 Expanded(child: Text(splitDistance < 0.999 ? 'Final partial split' : 'Split $splitNumber')),
-                                Text('${splitDistance.toStringAsFixed(2)} km'),
+                                Text(_distanceText(splitDistance)),
                                 const SizedBox(width: 16),
                                 Text(paceText, style: const TextStyle(fontWeight: FontWeight.w600)),
                               ],
@@ -2085,8 +2198,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
             final avgSpeed = totalSeconds > 0 ? totalDistance / (totalSeconds / 3600) : 0.0;
             String paceText(double value) {
               if (value <= 0 || !value.isFinite) return '—';
-              final rounded = value.round();
-              return '${rounded ~/ 60}:${(rounded % 60).toString().padLeft(2, '0')} /km';
+              return _paceText(value);
             }
             final activityLabel = targetActivity == 'All activities' ? 'All GPS activities' : targetActivity;
 
@@ -2115,7 +2227,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                       children: [
                         Row(children: [
                           Expanded(child: Text('Distance goal', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600))),
-                          Text('${totalDistance.toStringAsFixed(1)} / ${distanceGoal.toStringAsFixed(0)} km', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
+                          Text('${_distanceText(totalDistance, decimals: 1)} / ${_distanceText(distanceGoal, decimals: 0)}', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
                         ]),
                         const SizedBox(height: 8),
                         ClipRRect(
@@ -2138,6 +2250,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 ),
                 const SizedBox(height: 8),
                 GridView.count(
+                  key: const PageStorageKey<String>('fitness_gps_goals_stats_grid'),
                   crossAxisCount: 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -2145,7 +2258,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   crossAxisSpacing: 8,
                   childAspectRatio: 1.6,
                   children: [
-                    _summaryCard(context, Icons.route_outlined, 'Distance', '${totalDistance.toStringAsFixed(2)} km'),
+                    _summaryCard(context, Icons.route_outlined, 'Distance', _distanceText(totalDistance)),
                     _summaryCard(context, Icons.flag_outlined, 'Activities', '${sessions.length}'),
                     _summaryCard(context, Icons.timer_outlined, 'Active time', _formatDuration(totalSeconds)),
                     _summaryCard(
@@ -2153,8 +2266,8 @@ class _FitnessScreenState extends State<FitnessScreen> {
                       Icons.speed,
                       targetActivity == 'Cycling' ? 'Average speed' : 'Average pace',
                       targetActivity == 'Cycling'
-                          ? (avgSpeed > 0 ? '${avgSpeed.toStringAsFixed(1)} km/h' : '—')
-                          : (targetActivity == 'Running' || targetActivity == 'Walking' ? paceText(avgPace) : (avgSpeed > 0 ? '${avgSpeed.toStringAsFixed(1)} km/h' : '—')),
+                          ? (avgSpeed > 0 ? _speedText(avgSpeed) : '—')
+                          : (targetActivity == 'Running' || targetActivity == 'Walking' ? paceText(avgPace) : (avgSpeed > 0 ? _speedText(avgSpeed) : '—')),
                     ),
                   ],
                 ),
@@ -2173,6 +2286,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
 
   Future<void> _editGpsGoals(Map<String, dynamic> current) async {
     double distanceGoal = (current['gpsWeeklyDistanceGoalKm'] as num?)?.toDouble() ?? 15.0;
+    double distanceGoalDisplay = AppSettings.instance.displayDistanceFromKm(distanceGoal);
     int sessionGoal = (current['gpsWeeklySessionGoal'] as num?)?.toInt() ?? 3;
     String targetActivity = current['gpsGoalActivity'] as String? ?? 'All activities';
     final save = await showDialog<bool>(
@@ -2197,11 +2311,21 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 const SizedBox(height: 14),
                 Text('Weekly distance target', style: Theme.of(context).textTheme.labelLarge),
                 DropdownButtonFormField<double>(
-                  value: distanceGoal,
+                  value: distanceGoalDisplay,
                   items: const [5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0]
-                      .map((value) => DropdownMenuItem(value: value, child: Text('${value.toStringAsFixed(0)} km')))
+                      .map((value) => DropdownMenuItem(
+                            value: AppSettings.instance.displayDistanceFromKm(value),
+                            child: Text('${AppSettings.instance.displayDistanceFromKm(value).toStringAsFixed(0)} ${AppSettings.instance.distanceUnit}'),
+                          ))
                       .toList(),
-                  onChanged: (value) { if (value != null) setDialogState(() => distanceGoal = value); },
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() {
+                        distanceGoalDisplay = value;
+                        distanceGoal = AppSettings.instance.enteredDistanceToKm(value);
+                      });
+                    }
+                  },
                 ),
                 const SizedBox(height: 14),
                 Text('Activities per 7 days', style: Theme.of(context).textTheme.labelLarge),
@@ -2267,10 +2391,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
           final weight = (record['bestWeightKg'] as num?)?.toDouble();
           final reps = (record['bestReps'] as num?)?.toInt();
           if (weight != null && reps != null) {
-            final weightLabel = weight == weight.roundToDouble()
-                ? weight.toStringAsFixed(0)
-                : weight.toStringAsFixed(1);
-            return '${weightLabel} kg × $reps';
+            return '${_formatWeightFromKg(weight)} × $reps';
           }
           return 'Record saved';
         }
@@ -2615,7 +2736,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                         const SizedBox(width: 8),
                         metric('Training time', '${currentMinutes}m', minuteChange, Icons.timer_outlined),
                         const SizedBox(width: 8),
-                        metric('Distance', '${currentDistance.toStringAsFixed(1)} km',
+                        metric('Distance', _distanceText(currentDistance, decimals: 1),
                             distanceChange, Icons.route_outlined),
                       ],
                     ),
@@ -2724,10 +2845,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 final metric = weight * reps;
                 if (metric > bestMetric) {
                   bestMetric = metric;
-                  final weightText = weight == weight.roundToDouble()
-                      ? weight.toStringAsFixed(0)
-                      : weight.toStringAsFixed(1);
-                  valueLabel = '$weightText kg × $reps';
+                  valueLabel = '${_formatWeightFromKg(weight)} × $reps';
                 }
               }
             }
@@ -2972,7 +3090,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
 
             if (completedSetCount >= 3 && reps.length >= 3 && sameLoad && lowestReps >= 12 && load > 0) {
               recommendation = 'Consider the next small weight increment, aiming for 8–10 controlled reps.';
-              rationale = 'You completed ${reps.length} sets at ${load.toStringAsFixed(load == load.roundToDouble() ? 0 : 1)} kg, averaging $averageReps reps (minimum $lowestReps).';
+              rationale = 'You completed ${reps.length} sets at ${_formatWeightFromKg(load)}, averaging $averageReps reps (minimum $lowestReps).';
               icon = Icons.fitness_center;
             } else if (completedSetCount >= 3 && reps.length >= 3 && lowestReps >= 12 && load == 0) {
               recommendation = 'Try adding 1–2 reps to each set while keeping your form steady.';
@@ -2980,10 +3098,10 @@ class _FitnessScreenState extends State<FitnessScreen> {
               icon = Icons.trending_up;
             } else if (completedSetCount >= 3 && reps.length >= 3 && highestReps - lowestReps <= 2) {
               recommendation = 'Keep the same load and add 1 rep to your lowest-rep set.';
-              rationale = 'Your sets were consistent at $lowestReps–$highestReps reps using ${load.toStringAsFixed(load == load.roundToDouble() ? 0 : 1)} kg.';
+              rationale = 'Your sets were consistent at $lowestReps–$highestReps reps using ${_formatWeightFromKg(load)}.';
               icon = Icons.trending_up;
             } else if (reps.isNotEmpty) {
-              recommendation = 'Keep ${load.toStringAsFixed(load == load.roundToDouble() ? 0 : 1)} kg and aim to bring every set up to $averageReps reps.';
+              recommendation = 'Keep ${_formatWeightFromKg(load)} and aim to bring every set up to $averageReps reps.';
               rationale = 'Your logged sets ranged from $lowestReps to $highestReps reps. Improve consistency before increasing the load.';
               icon = Icons.repeat;
             } else {
@@ -3795,10 +3913,11 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
     if (_saving) return;
     final isTimed = _exercise.category == 'Cardio' || _exercise.category == 'Mobility';
     final reps = int.tryParse(_repsController.text.trim());
-    final weight = double.tryParse(_weightController.text.trim());
+    final enteredWeight = double.tryParse(_weightController.text.trim());
+    final weightKg = enteredWeight == null ? null : _enteredWeightToKg(enteredWeight);
     final duration = int.tryParse(_durationController.text.trim());
     if ((isTimed && (duration == null || duration <= 0)) ||
-        (!isTimed && (reps == null || reps < 0 || weight == null || !weight.isFinite || weight < 0))) {
+        (!isTimed && (reps == null || reps < 0 || enteredWeight == null || !enteredWeight.isFinite || enteredWeight < 0))) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter valid non-negative repetitions and weight.')),
       );
@@ -3808,7 +3927,7 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
     final sets = _currentSets;
     sets.add({
       if (!isTimed) 'reps': reps,
-      if (!isTimed) 'weightKg': weight,
+      if (!isTimed) 'weightKg': weightKg,
       if (isTimed) 'durationSeconds': duration,
       'completedAt': Timestamp.fromDate(DateTime.now()),
     });
@@ -3827,7 +3946,7 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
         newRecord = await _updatePersonalRecord(
           isTimed: isTimed,
           reps: reps,
-          weight: weight,
+          weight: weightKg,
           duration: duration,
         );
       } catch (_) {
@@ -3991,7 +4110,7 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
                 Expanded(child: TextField(
                   controller: _weightController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Weight (kg)', border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: 'Weight (${AppSettings.instance.weightUnit})', border: const OutlineInputBorder()),
                 )),
               ]),
             const SizedBox(height: 12),
@@ -4009,7 +4128,7 @@ class _GuidedWorkoutScreenState extends State<_GuidedWorkoutScreen> {
                 title: Text(entry.value['durationSeconds'] != null
                     ? '${entry.value['durationSeconds']} seconds'
                     : '${entry.value['reps'] ?? 0} reps'),
-                trailing: Text(entry.value['weightKg'] == null ? '' : '${entry.value['weightKg']} kg'),
+                trailing: Text(entry.value['weightKg'] == null ? '' : _formatWeightFromKg((entry.value['weightKg'] as num).toDouble())),
               )),
             ],
             if (_restRemaining > 0) ...[

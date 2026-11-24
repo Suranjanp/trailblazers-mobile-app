@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:test_ap_1/theme/app_colors.dart';
 
+import '../services/app_settings.dart';
+
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key});
 
@@ -12,8 +14,24 @@ class HealthScreen extends StatefulWidget {
 }
 
 class _HealthScreenState extends State<HealthScreen> {
+  // Water is stored in milliliters so existing Firestore history remains compatible.
   static const int waterGoal = 2000;
   static const double sleepGoal = 8.0;
+  static const double _millilitersPerUsFluidOunce = 29.5735;
+
+  bool get _isMetric => AppSettings.instance.isMetric;
+  String get _waterUnit => _isMetric ? 'ml' : 'fl oz';
+
+  double _displayWater(int milliliters) =>
+      _isMetric ? milliliters.toDouble() : milliliters / _millilitersPerUsFluidOunce;
+
+  String _formatWater(int milliliters) {
+    final value = _displayWater(milliliters);
+    return _isMetric ? '${value.round()} ml' : '${value.round()} fl oz';
+  }
+
+  int get _waterIncrementMl => _isMetric ? 250 : 237;
+  String get _waterIncrementLabel => _isMetric ? '+250 ml' : '+8 fl oz';
 
   int waterIntake = 0;
   double sleepHours = 0;
@@ -30,9 +48,20 @@ class _HealthScreenState extends State<HealthScreen> {
   @override
   void initState() {
     super.initState();
+    AppSettings.instance.addListener(_onAppSettingsChanged);
     _today = _dateOnly(DateTime.now());
     _weekStart = _mondayOf(_today);
     _loadHealthData();
+  }
+
+  void _onAppSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    AppSettings.instance.removeListener(_onAppSettingsChanged);
+    super.dispose();
   }
 
   DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
@@ -244,7 +273,7 @@ class _HealthScreenState extends State<HealthScreen> {
               Text(
                 'This sleep entry is recorded for today, the date you woke up.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade600,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
               ),
             ],
@@ -367,11 +396,11 @@ class _HealthScreenState extends State<HealthScreen> {
             'Your Health',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: AppColors.navigationNavy,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
           ),
           const SizedBox(height: 6),
-          Text(currentDate, style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+          Text(currentDate, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14)),
           if (_isSaving) ...[
             const SizedBox(height: 8),
             const LinearProgressIndicator(minHeight: 2),
@@ -385,7 +414,7 @@ class _HealthScreenState extends State<HealthScreen> {
                 child: _buildSummaryCard(
                   icon: Icons.water_drop,
                   title: 'Water',
-                  value: '$waterIntake ml',
+                  value: _formatWater(waterIntake),
                   color: Colors.blue,
                 ),
               ),
@@ -441,7 +470,7 @@ class _HealthScreenState extends State<HealthScreen> {
                         width: 145,
                         height: 145,
                         child: ElevatedButton(
-                          onPressed: _isSaving ? null : () => _addWater(250),
+                          onPressed: _isSaving ? null : () => _addWater(_waterIncrementMl),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue.shade50,
                             foregroundColor: Colors.blue.shade800,
@@ -449,13 +478,13 @@ class _HealthScreenState extends State<HealthScreen> {
                             shape: const CircleBorder(),
                             padding: const EdgeInsets.all(12),
                           ),
-                          child: const Column(
+                          child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.water_drop, size: 38),
-                              SizedBox(height: 5),
-                              Text('+250 ml', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                              Text('Add a cup', style: TextStyle(fontSize: 12)),
+                              const Icon(Icons.water_drop, size: 38),
+                              const SizedBox(height: 5),
+                              Text(_waterIncrementLabel, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              const Text('Add a cup', style: TextStyle(fontSize: 12)),
                             ],
                           ),
                         ),
@@ -464,11 +493,11 @@ class _HealthScreenState extends State<HealthScreen> {
                   ),
                 ),
                 const SizedBox(height: 22),
-                Text('$waterIntake ml', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blue)),
-                Text('of $waterGoal ml daily goal', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+                Text(_formatWater(waterIntake), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blue)),
+                Text('of ${_formatWater(waterGoal)} daily goal', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14)),
                 const SizedBox(height: 16),
                 Text(
-                  waterIntake >= waterGoal ? 'Daily water goal reached!' : '${waterGoal - waterIntake} ml remaining',
+                  waterIntake >= waterGoal ? 'Daily water goal reached!' : '${_formatWater(waterGoal - waterIntake)} remaining',
                   style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 12),
@@ -505,7 +534,7 @@ class _HealthScreenState extends State<HealthScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Text('Daily goal: ${sleepGoal.toStringAsFixed(0)} hours', style: TextStyle(color: Colors.grey.shade600)),
+                Text('Daily goal: ${sleepGoal.toStringAsFixed(0)} hours', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
@@ -529,7 +558,7 @@ class _HealthScreenState extends State<HealthScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(color: AppColors.navigationNavy, borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(color: Theme.of(context).colorScheme.onSurface, borderRadius: BorderRadius.circular(16)),
             child: const Row(
               children: [
                 Icon(Icons.favorite, color: Colors.white, size: 28),
@@ -582,15 +611,15 @@ class _HealthScreenState extends State<HealthScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Expanded(child: _buildWeeklyAverage('Avg. water', '${averageWater.round()} ml', '${_daysLogged('waterIntake')} days logged', Colors.blue)),
+                  Expanded(child: _buildWeeklyAverage('Avg. water', _formatWater(averageWater.round()), '${_daysLogged('waterIntake')} days logged', Colors.blue)),
                   const SizedBox(width: 10),
                   Expanded(child: _buildWeeklyAverage('Avg. sleep', '${averageSleep.toStringAsFixed(1)} hrs', '${_daysLogged('sleepHours')} nights logged', Colors.deepPurple)),
                 ],
               ),
               const SizedBox(height: 22),
-              const Text('Water intake', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Water intake (${_waterUnit})', style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              _buildWeeklyBars('waterIntake', waterGoal, Colors.blue, 'ml'),
+              _buildWeeklyBars('waterIntake', waterGoal, Colors.blue, 'water'),
               const SizedBox(height: 22),
               const Text('Sleep', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
@@ -598,7 +627,7 @@ class _HealthScreenState extends State<HealthScreen> {
               const SizedBox(height: 8),
               Text(
                 'Averages use days with an entry. Empty days are not counted as zero.',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11),
               ),
             ],
           ),
@@ -617,7 +646,7 @@ class _HealthScreenState extends State<HealthScreen> {
           Text(title, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
           const SizedBox(height: 5),
           Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          Text(detail, style: TextStyle(color: Colors.grey.shade600, fontSize: 10)),
+          Text(detail, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
         ],
       ),
     );
@@ -643,16 +672,20 @@ class _HealthScreenState extends State<HealthScreen> {
                     width: 18,
                     height: barHeight,
                     decoration: BoxDecoration(
-                      color: value <= 0 ? Colors.grey.shade200 : color,
+                      color: value <= 0 ? Theme.of(context).colorScheme.surfaceContainerHighest : color,
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 6),
-              Text(DateFormat('E').format(date), style: TextStyle(fontSize: 10, color: Colors.grey.shade700)),
+              Text(DateFormat('E').format(date), style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
               Text(
-                value <= 0 ? '—' : (unit == 'ml' ? value.round().toString() : value.toStringAsFixed(1)),
+                value <= 0
+                    ? '—'
+                    : unit == 'water'
+                        ? _displayWater(value.round()).round().toString()
+                        : value.toStringAsFixed(1),
                 style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
               ),
             ],
@@ -664,7 +697,7 @@ class _HealthScreenState extends State<HealthScreen> {
 
   Widget _buildSectionTitle(String title) => Text(
         title,
-        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: AppColors.navigationNavy),
+        style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
       );
 
   Widget _buildSummaryCard({
@@ -675,13 +708,13 @@ class _HealthScreenState extends State<HealthScreen> {
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerLow, borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, color: color, size: 28),
           const SizedBox(height: 12),
-          Text(title, style: TextStyle(color: Colors.grey.shade600)),
+          Text(title, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 4),
           Text(value, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
         ],
@@ -693,11 +726,11 @@ class _HealthScreenState extends State<HealthScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.12),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
