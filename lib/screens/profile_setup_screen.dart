@@ -39,17 +39,23 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   static const _equations = {'female': 'Female', 'male': 'Male'};
 
   final _formKey = GlobalKey<FormState>();
+
   late final TextEditingController _name;
   final _age = TextEditingController();
   final _height = TextEditingController();
   final _weight = TextEditingController();
   final _calorieTarget = TextEditingController();
+  final _targetWeight = TextEditingController();
+
+  late final bool _isMetric;
 
   String _goal = 'maintain';
   String? _equation;
   String? _activity;
+
   bool _eligibleForEstimate = false;
   bool _saving = false;
+
   int? _suggestion;
   String? _estimateMessage;
   String? _error;
@@ -57,29 +63,63 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   @override
   void initState() {
     super.initState();
+
+    _isMetric = AppSettings.instance.isMetric;
+
     final saved = widget.savedProfile;
     final savedName = saved['name'];
+
     _name = TextEditingController(
       text: savedName is String ? savedName : widget.initialName,
     );
+
     _age.text = saved['ageYears']?.toString() ?? '';
-    final settings = AppSettings.instance;
-    final savedHeightCm = (saved['heightCm'] as num?)?.toDouble();
-    final savedWeightKg = (saved['weightKg'] as num?)?.toDouble();
+
+    final savedHeightCm = _positiveNumber(saved['heightCm']);
+    final savedWeightKg = _positiveNumber(saved['weightKg']);
+    final savedTargetKg = _positiveNumber(saved['targetWeightKg']);
+
     _height.text = savedHeightCm == null
         ? ''
-        : (settings.isMetric ? savedHeightCm : savedHeightCm / 2.54)
-            .toStringAsFixed(1);
+        : (_isMetric ? savedHeightCm : savedHeightCm / 2.54).toStringAsFixed(1);
+
     _weight.text = savedWeightKg == null
         ? ''
-        : (settings.isMetric ? savedWeightKg : savedWeightKg * 2.2046226218)
-            .toStringAsFixed(1);
-    _calorieTarget.text = saved['calorieTarget']?.toString() ?? '';
+        : (_isMetric ? savedWeightKg : savedWeightKg * 2.2046226218)
+              .toStringAsFixed(1);
+
+    _targetWeight.text = savedTargetKg == null
+        ? ''
+        : (_isMetric ? savedTargetKg : savedTargetKg * 2.2046226218)
+              .toStringAsFixed(1);
+
+    final savedCalories = _positiveNumber(saved['calorieTarget']);
+    _calorieTarget.text = savedCalories == null
+        ? ''
+        : savedCalories.toStringAsFixed(0);
 
     final savedGoal = saved['bodyGoal'];
     if (savedGoal is String && _goals.containsKey(savedGoal)) {
       _goal = savedGoal;
     }
+
+    final savedEquation = saved['calorieEquation'];
+    if (savedEquation is String && _equations.containsKey(savedEquation)) {
+      _equation = savedEquation;
+    }
+
+    final savedActivity = saved['activityLevel'];
+    if (savedActivity is String && _activityLevels.containsKey(savedActivity)) {
+      _activity = savedActivity;
+    }
+  }
+
+  double? _positiveNumber(dynamic value) {
+    if (value is! num || !value.isFinite || value <= 0) {
+      return null;
+    }
+
+    return value.toDouble();
   }
 
   @override
@@ -89,6 +129,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     _height.dispose();
     _weight.dispose();
     _calorieTarget.dispose();
+    _targetWeight.dispose();
     super.dispose();
   }
 
@@ -97,48 +138,138 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   }
 
   Future<void> _save() async {
-    if (_saving || !_formKey.currentState!.validate()) return;
+    if (_saving || !_formKey.currentState!.validate()) {
+      return;
+    }
 
     if (FirebaseAuth.instance.currentUser?.uid != widget.userId) {
-      setState(() => _error = 'Your session changed. Please sign in again.');
+      setState(() {
+        _error = 'Your session changed. Please sign in again.';
+      });
       return;
     }
 
     FocusScope.of(context).unfocus();
+
+    // Capture the validated inputs before beginning the transaction.
+    final name = _name.text.trim();
+    final age = int.parse(_age.text.trim());
+    final enteredHeight = double.parse(_height.text.trim());
+    final enteredWeight = double.parse(_weight.text.trim());
+    final enteredTarget = double.tryParse(_targetWeight.text.trim());
+
+    final heightCm = _isMetric ? enteredHeight : enteredHeight * 2.54;
+    final weightKg = _isMetric ? enteredWeight : enteredWeight / 2.2046226218;
+
+    final targetKg = enteredTarget == null
+        ? null
+        : (_isMetric ? enteredTarget : enteredTarget / 2.2046226218);
+
+    final calorieTarget = int.tryParse(_calorieTarget.text.trim());
+    final goal = _goal;
+    final equation = _equation;
+    final activity = _activity;
+    final measuredAt = Timestamp.now();
+
     setState(() {
       _saving = true;
       _error = null;
     });
 
     try {
-      await FirebaseFirestore.instance
+      final profile = FirebaseFirestore.instance
           .collection('users')
-          .doc(widget.userId)
-          .set({
-            'name': _name.text.trim(),
-            'ageYears': int.parse(_age.text.trim()),
-            'heightCm': AppSettings.instance.isMetric
-                ? double.parse(_height.text.trim())
-                : double.parse(_height.text.trim()) * 2.54,
-            'weightKg': AppSettings.instance.isMetric
-                ? double.parse(_weight.text.trim())
-                : double.parse(_weight.text.trim()) / 2.2046226218,
-            'bodyGoal': _goal,
-            'calorieTarget': int.tryParse(_calorieTarget.text.trim()),
-          }, SetOptions(merge: true));
+          .doc(widget.userId);
 
-      if (!mounted) return;
+      // Save profile details and weight history together.
+      // Existing unrelated fields are preserved.
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final snapshot = await transaction.get(profile);
+        final previous = snapshot.data() ?? <String, dynamic>{};
+
+        final history = <Map<String, dynamic>>[];
+        final rawHistory = previous['weightHistory'];
+
+        if (rawHistory is List) {
+          for (final entry in rawHistory) {
+            if (entry is Map &&
+                _positiveNumber(entry['weightKg']) != null &&
+                entry['loggedAt'] is Timestamp) {
+              history.add({
+                'weightKg': (entry['weightKg'] as num).toDouble(),
+                'loggedAt': entry['loggedAt'],
+              });
+            }
+          }
+        }
+
+        history.sort(
+          (a, b) => (a['loggedAt'] as Timestamp).compareTo(
+            b['loggedAt'] as Timestamp,
+          ),
+        );
+
+        final lastWeight = history.isEmpty
+            ? null
+            : (history.last['weightKg'] as num).toDouble();
+
+        // Avoid duplicate check-ins caused by unit-conversion rounding.
+        if (lastWeight == null || (lastWeight - weightKg).abs() >= 0.05) {
+          history.add({'weightKg': weightKg, 'loggedAt': measuredAt});
+        }
+
+        // Bound the history stored inside the user document.
+        final recentHistory = history.length > 90
+            ? history.sublist(history.length - 90)
+            : history;
+
+        final startingWeight =
+            _positiveNumber(previous['startingWeightKg']) ??
+            (recentHistory.first['weightKg'] as num).toDouble();
+
+        transaction.set(profile, {
+          'name': name,
+          'ageYears': age,
+          'heightCm': heightCm,
+          'weightKg': weightKg,
+          'targetWeightKg': targetKg,
+          'startingWeightKg': startingWeight,
+          'weightHistory': recentHistory,
+          'bodyGoal': goal,
+          'calorieTarget': calorieTarget,
+          'calorieEquation': equation,
+          'activityLevel': activity,
+          'profileUpdatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+
+      if (!mounted) {
+        return;
+      }
+
       if (widget.openedFromProfile) {
         Navigator.of(context).pop();
       } else {
         _goHome();
       }
     } on FirebaseException catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = 'Could not save your profile (${error.code}). Try again.';
-        });
+      if (!mounted) {
+        return;
       }
+
+      setState(() {
+        _error = error.code == 'unavailable'
+            ? 'Connect to the internet to save your profile.'
+            : 'Could not save your profile (${error.code}). Try again.';
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _error = 'Could not save your profile. Please try again.';
+      });
     } finally {
       if (mounted) {
         setState(() => _saving = false);
@@ -162,12 +293,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     final age = int.tryParse(_age.text.trim());
     final heightInput = double.tryParse(_height.text.trim());
     final weightInput = double.tryParse(_weight.text.trim());
+
     final height = heightInput == null
         ? null
-        : (AppSettings.instance.isMetric ? heightInput : heightInput * 2.54);
+        : (_isMetric ? heightInput : heightInput * 2.54);
+
     final weight = weightInput == null
         ? null
-        : (AppSettings.instance.isMetric ? weightInput : weightInput / 2.2046226218);
+        : (_isMetric ? weightInput : weightInput / 2.2046226218);
+
     final equation = _equation;
     final activity = _activity;
 
@@ -184,14 +318,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         equation == null ||
         activity == null) {
       _showEstimateMessage(
-        'Check your age, height, and weight. Select an equation and activity '
-        'level, and confirm that the estimate applies to you.',
+        'Check your age, height, and weight. Select an equation and '
+        'activity level, and confirm that the estimate applies to you.',
       );
       return;
     }
 
     final heightMetres = height / 100;
     final bmi = weight / (heightMetres * heightMetres);
+
+    // Retains the existing weight-loss estimation restriction.
     if (_goal == 'lose' && bmi < 25) {
       _showEstimateMessage(
         'A weight-loss estimate is unavailable for these measurements. '
@@ -200,7 +336,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       return;
     }
 
-    // Adult Estimated Energy Requirement equations, 2023 DRI Table S-3.
+    // Existing adult Estimated Energy Requirement equations.
+    // 2023 Dietary Reference Intakes, Table S-3.
     final maintenance = switch ((equation, activity)) {
       ('male', 'inactive') =>
         753.07 - 10.83 * age + 6.50 * height + 14.10 * weight,
@@ -227,8 +364,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       _ => maintenance,
     };
 
-    // Suppress unusually low or high automatic estimates.
+    // Retains the existing automatic-estimate limits.
     final minimum = equation == 'female' ? 1500 : 1800;
+
     if (!estimate.isFinite || estimate < minimum || estimate > 6000) {
       _showEstimateMessage(
         'An automatic target is unavailable for these inputs. '
@@ -261,9 +399,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       onChanged: (_) => setState(_clearEstimate),
       validator: (value) {
         final number = double.tryParse((value ?? '').trim());
+
         if (number == null || !number.isFinite || number <= 0) {
           return 'Enter a number greater than zero.';
         }
+
         return null;
       },
     );
@@ -289,7 +429,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       onChanged: _saving
           ? null
           : (selected) {
-              if (selected == null) return;
+              if (selected == null) {
+                return;
+              }
+
               setState(() {
                 onSelected(selected);
                 _clearEstimate();
@@ -321,6 +464,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   padding: const EdgeInsets.all(24),
                   children: [
                     Text('Body & goal', style: theme.textTheme.headlineMedium),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Keep your measurements and goals up to date. '
+                      'Your calorie target stays under your control.',
+                    ),
                     const SizedBox(height: 24),
                     TextFormField(
                       controller: _name,
@@ -348,9 +496,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       onChanged: (_) => setState(_clearEstimate),
                       validator: (value) {
                         final age = int.tryParse((value ?? '').trim());
+
                         if (age == null || age < 18 || age > 120) {
                           return 'Enter a whole-number age from 18 to 120.';
                         }
+
                         return null;
                       },
                     ),
@@ -358,13 +508,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     _measurementField(
                       _height,
                       'Height',
-                      AppSettings.instance.isMetric ? 'cm' : 'in',
+                      _isMetric ? 'cm' : 'in',
                     ),
                     const SizedBox(height: 16),
                     _measurementField(
                       _weight,
                       'Current weight',
-                      AppSettings.instance.weightUnit,
+                      _isMetric ? 'kg' : 'lb',
                     ),
                     const SizedBox(height: 16),
                     _choiceField(
@@ -373,6 +523,42 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       choices: _goals,
                       onSelected: (value) => _goal = value,
                     ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _targetWeight,
+                      enabled: !_saving,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Target weight (optional)',
+                        suffixText: _isMetric ? 'kg' : 'lb',
+                        helperText: 'Leave blank if you are not tracking a weight target.',
+                        helperMaxLines: 2,
+                        border: const OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        final input = (value ?? '').trim();
+
+                        if (input.isEmpty) {
+                          return null;
+                        }
+
+                        final number = double.tryParse(input);
+
+                        if (number == null || !number.isFinite || number <= 0) {
+                          return 'Enter a number greater than zero.';
+                        }
+
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Changing your current weight records a check-in. '
+                      'Progress starts from your first saved check-in.',
+                      style: theme.textTheme.bodySmall,
+                    ),
                     const SizedBox(height: 24),
                     Text(
                       'Calorie estimate (optional)',
@@ -380,8 +566,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Choose your usual activity level. You can also enter '
-                      'your own target below.',
+                      'Choose your usual activity level. You can also '
+                      'enter your own calorie target below.',
                     ),
                     const SizedBox(height: 12),
                     _choiceField(
@@ -402,8 +588,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       controlAffinity: ListTileControlAffinity.leading,
                       value: _eligibleForEstimate,
                       title: const Text(
-                        'I am 19 or older and am neither pregnant nor '
-                        'breastfeeding.',
+                        'I am 19 or older and am neither pregnant '
+                        'nor breastfeeding.',
                       ),
                       onChanged: _saving
                           ? null
@@ -414,9 +600,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                               });
                             },
                     ),
-                    OutlinedButton(
+                    OutlinedButton.icon(
                       onPressed: _saving ? null : _calculateSuggestion,
-                      child: const Text('Calculate suggestion'),
+                      icon: const Icon(Icons.calculate_outlined),
+                      label: const Text('Calculate suggestion'),
                     ),
                     if (_estimateMessage case final String message)
                       Padding(
@@ -424,7 +611,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         child: Text(message),
                       ),
                     if (suggestion != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       Text(
                         'Suggested daily target: $suggestion kcal',
                         style: theme.textTheme.titleMedium,
@@ -432,7 +619,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       TextButton(
                         onPressed: _saving
                             ? null
-                            : () => _calorieTarget.text = suggestion.toString(),
+                            : () {
+                                _calorieTarget.text = suggestion.toString();
+                              },
                         child: const Text('Use suggestion'),
                       ),
                     ],
@@ -444,15 +633,25 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Daily calorie target (optional)',
                         suffixText: 'kcal',
+                        helperText:
+                            'This target is used in your Nutrition page.',
+                        helperMaxLines: 2,
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) {
                         final input = (value ?? '').trim();
-                        if (input.isEmpty) return null;
+
+                        if (input.isEmpty) {
+                          return null;
+                        }
+
                         final target = int.tryParse(input);
-                        return target == null || target <= 0
-                            ? 'Enter a positive whole number.'
-                            : null;
+
+                        if (target == null || target <= 0) {
+                          return 'Enter a positive whole number.';
+                        }
+
+                        return null;
                       },
                     ),
                     if (_error case final String message)
@@ -464,15 +663,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         ),
                       ),
                     const SizedBox(height: 24),
-                    FilledButton(
+                    FilledButton.icon(
                       onPressed: _saving ? null : _save,
-                      child: Text(_saving ? 'Saving…' : 'Save profile'),
+                      icon: const Icon(Icons.check),
+                      label: Text(_saving ? 'Saving…' : 'Save profile'),
                     ),
                     if (!widget.openedFromProfile)
                       TextButton(
                         onPressed: _saving ? null : _goHome,
                         child: const Text('Skip for now'),
                       ),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
@@ -483,5 +684,3 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     );
   }
 }
-
-
