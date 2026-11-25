@@ -9,9 +9,8 @@ import '../services/notification_settings.dart';
 import '../theme/app_colors.dart';
 import 'account_profile_screen.dart';
 import 'auth_screen.dart';
-import 'health_screen.dart';
+import 'health_hub_screen.dart';
 import 'home_screen.dart';
-import 'nutrition_screen.dart';
 import 'schedule_screen.dart';
 import 'fitness_screen.dart';
 
@@ -46,7 +45,6 @@ class _MainScreenState extends State<MainScreen> {
   static const List<String> _titles = [
     'Home',
     'Schedule',
-    'Nutrition',
     'Health',
     'Fitness',
     'Profile',
@@ -57,7 +55,6 @@ class _MainScreenState extends State<MainScreen> {
   static const List<IconData> _icons = [
     Icons.home_outlined,
     Icons.calendar_month_outlined,
-    Icons.restaurant_outlined,
     Icons.favorite_outline,
     Icons.fitness_center,
   ];
@@ -245,7 +242,7 @@ class _MainScreenState extends State<MainScreen> {
   void _openProfileFromDrawer() {
     Navigator.of(context).pop();
     _pageController.animateToPage(
-      5,
+      4,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeInOut,
     );
@@ -293,7 +290,7 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  /// Builds the five primary destinations. Profile remains accessible from
+  /// Builds the four primary destinations. Profile remains accessible from
   /// the quick-settings drawer to preserve the existing navigation layout.
   Widget _buildBottomNavigationBar(BuildContext context) {
     return SafeArea(
@@ -442,8 +439,7 @@ class _MainScreenState extends State<MainScreen> {
               onOpenSchedule: () => _selectDestination(1),
             ),
             const ScheduleScreen(key: PageStorageKey('schedule')),
-            const NutritionScreen(key: PageStorageKey('nutrition')),
-            const HealthScreen(key: PageStorageKey('health')),
+            const HealthHubScreen(key: PageStorageKey('health')),
             const FitnessScreen(key: PageStorageKey('fitness')),
             KeyedSubtree(
               key: const PageStorageKey('profile'),
