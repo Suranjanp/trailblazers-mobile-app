@@ -158,10 +158,11 @@ class _MainScreenState extends State<MainScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.auto_awesome,
-                color: AppColors.trailblazerOrange,
-                size: 38,
+              Image.asset(
+                'assets/images/CodePlay_Logo.png',
+                width: 76,
+                height: 76,
+                fit: BoxFit.contain,
               ),
               const SizedBox(height: 20),
               const Text(
