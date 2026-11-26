@@ -5,14 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:test_ap_1/theme/app_colors.dart';
 
 import '../services/app_settings.dart';
-import '../services/points_service.dart';
 
-/// Displays the user's daily hydration and sleep information, along with a
-/// seven-day history of both metrics.
-///
-/// Water values are stored in milliliters in Firestore regardless of the
-/// selected measurement system. This keeps historical records consistent;
-/// conversion happens only when values are displayed or entered.
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key});
 
@@ -21,90 +14,63 @@ class HealthScreen extends StatefulWidget {
 }
 
 class _HealthScreenState extends State<HealthScreen> {
-  // Daily targets. Water is persisted in milliliters so existing Firestore
-  // history remains compatible when the user changes measurement systems.
+  // Water is stored in milliliters so existing Firestore history remains compatible.
   static const int waterGoal = 2000;
   static const double sleepGoal = 8.0;
-
-  // Conversion factor for US fluid ounces. The stored value remains milliliters.
   static const double _millilitersPerUsFluidOunce = 29.5735;
 
-  // Read the current unit preference from the shared app settings service.
   bool get _isMetric => AppSettings.instance.isMetric;
   String get _waterUnit => _isMetric ? 'ml' : 'fl oz';
 
-  // Convert a stored milliliter value for display without changing the source.
   double _displayWater(int milliliters) =>
       _isMetric ? milliliters.toDouble() : milliliters / _millilitersPerUsFluidOunce;
 
-  // Format a water amount using the user's preferred unit and a whole number.
   String _formatWater(int milliliters) {
     final value = _displayWater(milliliters);
     return _isMetric ? '${value.round()} ml' : '${value.round()} fl oz';
   }
 
-  // The add-water button uses approximately one cup in either unit system.
   int get _waterIncrementMl => _isMetric ? 250 : 237;
   String get _waterIncrementLabel => _isMetric ? '+250 ml' : '+8 fl oz';
 
-  // Current-day values shown in the daily tracker.
   int waterIntake = 0;
   double sleepHours = 0;
-
-  // Loading and saving flags prevent conflicting interactions and show progress.
   bool _isLoading = true;
   bool _isSaving = false;
   String? _errorMessage;
 
-  // Dates are normalized to midnight so date comparisons and Firestore keys
-  // are independent of the current time of day.
   late DateTime _today;
   late DateTime _weekStart;
-
-  // Cached records for the selected week, keyed by yyyy-MM-dd.
   Map<String, Map<String, dynamic>> _weekLogs = {};
 
-  // The active Firebase user owns all health records stored by this screen.
   User? get _user => FirebaseAuth.instance.currentUser;
 
   @override
   void initState() {
     super.initState();
-
-    // Refresh displayed units when the user changes the app's measurement
-    // preference, then establish the current date/week and load saved records.
     AppSettings.instance.addListener(_onAppSettingsChanged);
     _today = _dateOnly(DateTime.now());
     _weekStart = _mondayOf(_today);
     _loadHealthData();
   }
 
-  // Rebuild the screen when shared app settings change.
   void _onAppSettingsChanged() {
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    // Remove the settings listener to avoid callbacks after this screen closes.
     AppSettings.instance.removeListener(_onAppSettingsChanged);
     super.dispose();
   }
 
-  // Remove the time component from a DateTime for date-only calculations.
   DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
-  // Return the Monday that begins the week containing [date].
   DateTime _mondayOf(DateTime date) =>
       _dateOnly(date.subtract(Duration(days: date.weekday - 1)));
 
-  // Use a stable date key for Firestore document IDs and in-memory lookups.
   String _dateKey(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
 
-  /// Builds the signed-in user's health-log document for a specific date.
-  ///
-  /// A missing authenticated user is treated as an error because health data
-  /// must always be associated with an account.
   DocumentReference<Map<String, dynamic>> _dayDocument(DateTime date) {
     final user = _user;
     if (user == null) {
@@ -117,16 +83,11 @@ class _HealthScreenState extends State<HealthScreen> {
         .doc(_dateKey(date));
   }
 
-  // Fetch one day's record. A missing document is represented as an empty map.
   Future<Map<String, dynamic>> _readDay(DateTime date) async {
     final snapshot = await _dayDocument(date).get();
     return snapshot.data() ?? <String, dynamic>{};
   }
 
-  /// Loads today's values and the records for the current week.
-  ///
-  /// Both reads run together. The result is applied only while this widget is
-  /// still mounted, preventing asynchronous work from updating a disposed UI.
   Future<void> _loadHealthData() async {
     if (_user == null) {
       setState(() {
@@ -166,10 +127,6 @@ class _HealthScreenState extends State<HealthScreen> {
     }
   }
 
-  /// Reads all seven daily documents for the week beginning on [weekStart].
-  ///
-  /// Each record is stored in a map under its date key so the weekly chart can
-  /// retrieve values in calendar order, including days with no saved entry.
   Future<Map<String, Map<String, dynamic>>> _loadWeekRecords(
     DateTime weekStart,
   ) async {
@@ -189,10 +146,7 @@ class _HealthScreenState extends State<HealthScreen> {
     return records;
   }
 
-  /// Moves the weekly history backward or forward by [amount] weeks.
-  ///
-  /// The current-day summary is not changed; only the week displayed in the
-  /// history section and its cached records are updated.
+
   Future<void> _changeWeek(int amount) async {
     final nextWeek = _weekStart.add(Duration(days: amount * 7));
     setState(() {
@@ -213,11 +167,6 @@ class _HealthScreenState extends State<HealthScreen> {
     }
   }
 
-  /// Adds water to today's total and persists the increment in Firestore.
-  ///
-  /// Firestore's increment operation avoids overwriting a value with a stale
-  /// client-side total. Reaching the daily target for the first time also
-  /// triggers the health-goal points award.
   Future<void> _addWater(int amount) async {
     if (amount <= 0 || _isSaving) return;
     final previousValue = waterIntake;
@@ -232,16 +181,6 @@ class _HealthScreenState extends State<HealthScreen> {
         'waterIntake': FieldValue.increment(amount),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-      final reachedGoal = previousValue < waterGoal && waterIntake >= waterGoal;
-      PointsAwardResult? pointsResult;
-      var pointsSyncFailed = false;
-      if (reachedGoal) {
-        try {
-          pointsResult = await _awardHealthGoal('water', 'Daily water goal');
-        } catch (_) {
-          pointsSyncFailed = true;
-        }
-      }
       if (!mounted) return;
       setState(() {
         _isSaving = false;
@@ -250,11 +189,6 @@ class _HealthScreenState extends State<HealthScreen> {
           'waterIntake': waterIntake,
         };
       });
-      if (pointsSyncFailed) {
-        _showMessage('Water saved, but points could not be synced.');
-      } else if (pointsResult?.awarded == true) {
-        _showMessage('Daily water goal reached! You earned ${pointsResult!.points} points.');
-      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -265,10 +199,6 @@ class _HealthScreenState extends State<HealthScreen> {
     }
   }
 
-  /// Resets today's water total to zero in both the UI and Firestore.
-  ///
-  /// The previous value is retained so the UI can be restored if the write
-  /// fails. Resetting does not delete the day's other health information.
   Future<void> _resetWater() async {
     if (waterIntake == 0 || _isSaving) return;
     final previousValue = waterIntake;
@@ -301,10 +231,6 @@ class _HealthScreenState extends State<HealthScreen> {
     }
   }
 
-  /// Opens a dialog for entering the number of hours slept.
-  ///
-  /// The entry is associated with today's date (the date the user woke up).
-  /// Input is validated before the dialog returns a value to be saved.
   Future<void> _logSleep() async {
     String sleepInput = sleepHours == 0 ? '' : _formatSleepInput(sleepHours);
     String? validationMessage;
@@ -388,16 +314,6 @@ class _HealthScreenState extends State<HealthScreen> {
         'sleepHours': result,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-      final reachedGoal = previousValue < sleepGoal && result >= sleepGoal;
-      PointsAwardResult? pointsResult;
-      var pointsSyncFailed = false;
-      if (reachedGoal) {
-        try {
-          pointsResult = await _awardHealthGoal('sleep', 'Daily sleep goal');
-        } catch (_) {
-          pointsSyncFailed = true;
-        }
-      }
       if (!mounted) return;
       setState(() {
         _isSaving = false;
@@ -406,13 +322,7 @@ class _HealthScreenState extends State<HealthScreen> {
           'sleepHours': result,
         };
       });
-      if (pointsSyncFailed) {
-        _showMessage('Sleep entry saved, but points could not be synced.');
-      } else if (pointsResult?.awarded == true) {
-        _showMessage('Sleep entry saved. You earned ${pointsResult!.points} points!');
-      } else {
-        _showMessage('Sleep entry saved.');
-      }
+      _showMessage('Sleep entry saved.');
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -423,27 +333,9 @@ class _HealthScreenState extends State<HealthScreen> {
     }
   }
 
-  /// Awards points for completing a daily health target.
-  ///
-  /// The date and goal identifier form the source ID, allowing the points
-  /// service to recognize repeat attempts for the same goal on the same day.
-  Future<PointsAwardResult?> _awardHealthGoal(String goalId, String title) {
-    return PointsService.instance.awardActivity(
-      type: PointsActivityType.healthGoal,
-      sourceId: '${_dateKey(_today)}_$goalId',
-      title: title,
-      metadata: <String, dynamic>{
-        'goalId': goalId,
-        'date': _dateKey(_today),
-      },
-    );
-  }
-
-  // Avoid displaying unnecessary decimal places for whole-hour sleep entries.
   String _formatSleepInput(double hours) =>
       hours == hours.roundToDouble() ? hours.toStringAsFixed(0) : hours.toString();
 
-  // Display a short confirmation or error message at the bottom of the screen.
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -451,9 +343,6 @@ class _HealthScreenState extends State<HealthScreen> {
     );
   }
 
-  /// Calculates the average of non-zero entries for a selected weekly metric.
-  ///
-  /// Days without a recorded value are excluded rather than counted as zero.
   double _averageFor(String field) {
     final values = _weekLogs.values
         .map((record) => (record[field] as num?)?.toDouble() ?? 0)
@@ -463,14 +352,10 @@ class _HealthScreenState extends State<HealthScreen> {
     return values.reduce((a, b) => a + b) / values.length;
   }
 
-  // Count how many days in the selected week contain a positive value.
   int _daysLogged(String field) => _weekLogs.values
       .where((record) => ((record[field] as num?)?.toDouble() ?? 0) > 0)
       .length;
 
-  /// Builds the health dashboard, including daily trackers and weekly history.
-  ///
-  /// Loading and error states are handled before the main content is created.
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -498,8 +383,6 @@ class _HealthScreenState extends State<HealthScreen> {
       );
     }
 
-    // Progress indicators are capped at 100% so values above a goal do not
-    // overflow their visual tracks. The underlying totals remain unchanged.
     final waterProgress = (waterIntake / waterGoal).clamp(0.0, 1.0).toDouble();
     final sleepProgress = (sleepHours / sleepGoal).clamp(0.0, 1.0).toDouble();
     final currentDate = DateFormat('EEEE, MMMM d').format(_today);
@@ -509,7 +392,6 @@ class _HealthScreenState extends State<HealthScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Page heading and the date to which the current-day entries apply.
           Text(
             'Your Health',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -524,8 +406,6 @@ class _HealthScreenState extends State<HealthScreen> {
             const LinearProgressIndicator(minHeight: 2),
           ],
           const SizedBox(height: 24),
-
-          // Compact summary cards provide the current water and sleep totals.
           _buildSectionTitle('Daily Overview'),
           const SizedBox(height: 12),
           Row(
@@ -550,8 +430,6 @@ class _HealthScreenState extends State<HealthScreen> {
             ],
           ),
           const SizedBox(height: 28),
-
-          // Hydration tracker: circular progress, quick-add control, and reset.
           _buildSectionTitle('Water Intake'),
           const SizedBox(height: 12),
           _buildTrackerCard(
@@ -632,9 +510,6 @@ class _HealthScreenState extends State<HealthScreen> {
             ),
           ),
           const SizedBox(height: 28),
-
-          // Sleep tracker: shows the saved duration and progress toward the
-          // daily target, with a dialog for entering or editing the duration.
           _buildSectionTitle('Sleep Tracking'),
           const SizedBox(height: 12),
           _buildTrackerCard(
@@ -678,12 +553,8 @@ class _HealthScreenState extends State<HealthScreen> {
             ),
           ),
           const SizedBox(height: 28),
-
-          // Weekly chart and averages for the currently selected Monday-Sunday.
           _buildWeeklySection(),
           const SizedBox(height: 28),
-
-          // Closing reminder displayed below the tracking tools.
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(18),
@@ -707,8 +578,6 @@ class _HealthScreenState extends State<HealthScreen> {
     );
   }
 
-  /// Builds the weekly history card, including week navigation, averages,
-  /// logged-day counts, and daily bar charts for water and sleep.
   Widget _buildWeeklySection() {
     final weekEnd = _weekStart.add(const Duration(days: 6));
     final weekLabel = '${DateFormat('MMM d').format(_weekStart)} – ${DateFormat('MMM d, y').format(weekEnd)}';
@@ -724,8 +593,6 @@ class _HealthScreenState extends State<HealthScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Previous/next controls change the displayed week. Future weeks
-              // are disabled so users cannot navigate beyond the current week.
               Row(
                 children: [
                   IconButton(
@@ -742,8 +609,6 @@ class _HealthScreenState extends State<HealthScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-
-              // Averages and logged-day counts exclude days with no entry.
               Row(
                 children: [
                   Expanded(child: _buildWeeklyAverage('Avg. water', _formatWater(averageWater.round()), '${_daysLogged('waterIntake')} days logged', Colors.blue)),
@@ -771,7 +636,6 @@ class _HealthScreenState extends State<HealthScreen> {
     );
   }
 
-  /// Builds one of the small metric cards used for weekly averages.
   Widget _buildWeeklyAverage(String title, String value, String detail, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -788,10 +652,6 @@ class _HealthScreenState extends State<HealthScreen> {
     );
   }
 
-  /// Draws seven vertical bars, one for each day in the selected week.
-  ///
-  /// [field] identifies the Firestore metric, [goal] sets the full-scale
-  /// height, [color] styles recorded values, and [unit] controls value labels.
   Widget _buildWeeklyBars(String field, num goal, Color color, String unit) {
     final goalValue = goal.toDouble();
     return Row(
@@ -835,13 +695,11 @@ class _HealthScreenState extends State<HealthScreen> {
     );
   }
 
-  // Shared heading style keeps section labels consistent across the page.
   Widget _buildSectionTitle(String title) => Text(
         title,
         style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
       );
 
-  /// Builds a compact card for one of the daily overview values.
   Widget _buildSummaryCard({
     required IconData icon,
     required String title,
@@ -864,7 +722,6 @@ class _HealthScreenState extends State<HealthScreen> {
     );
   }
 
-  // Shared surface styling for the larger hydration, sleep, and weekly cards.
   Widget _buildTrackerCard({required Widget child}) => Container(
         width: double.infinity,
         padding: const EdgeInsets.all(18),
