@@ -6,23 +6,33 @@ import 'package:timezone/timezone.dart' as tz;
 
 /// Central service for Trailblazer's local notifications.
 ///
-/// Call [initialize] once during app startup. Ask for notification permission
-/// from a user-initiated settings action by calling [requestPermissions].
-///
-/// This singleton keeps notification setup, scheduling, cancellation, and
-/// platform-specific presentation details in one place. Screens should call
-/// this service rather than configuring the notification plugin themselves.
+/// Initialize during startup. Request permission separately after the user
+/// chooses to enable notifications.
 class NotificationService {
-  NotificationService._();
+  NotificationService._()
+    : _plugin = FlutterLocalNotificationsPlugin(),
+      _loadTimezone = _deviceTimezone;
 
+  /// Creates an isolated instance for unit tests.
+  ///
+  /// App screens should continue using [NotificationService.instance].
+  /// Creates an isolated instance for unit tests.
+  @visibleForTesting
+  NotificationService.forTesting({
+    required FlutterLocalNotificationsPlugin plugin,
+    required Future<String> Function() loadTimezone,
+  }) : // Keep public parameter names for test callers.
+       // ignore: prefer_initializing_formals
+       _plugin = plugin,
+       // ignore: prefer_initializing_formals
+       _loadTimezone = loadTimezone;
+
+  /// Shared instance used throughout the app.
   static final NotificationService instance = NotificationService._();
 
-  /// Plugin instance used for all local notification operations.
-  final FlutterLocalNotificationsPlugin _plugin =
-      FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin;
+  final Future<String> Function() _loadTimezone;
 
-  // Android notification channels separate schedule reminders from optional
-  // motivational messages so users can manage their behavior independently.
   static const String _scheduleChannelId = 'trailblazer_schedule_reminders';
   static const String _scheduleChannelName = 'Schedule reminders';
   static const String _scheduleChannelDescription =
@@ -33,41 +43,40 @@ class NotificationService {
   static const String _motivationChannelDescription =
       'Optional encouragement and motivation from Trailblazer.';
 
-  // Prevents plugin operations from running before platform initialization
-  // and time-zone configuration have completed.
   bool _isInitialized = false;
 
   bool get isInitialized => _isInitialized;
 
-  /// Initializes local notifications and loads the device's IANA time zone.
+  /// Reads the actual device time zone during normal app usage.
+  static Future<String> _deviceTimezone() async {
+    final deviceTimezone = await FlutterTimezone.getLocalTimezone();
+    return deviceTimezone.identifier;
+  }
+
+  /// Initializes notifications and configures the local IANA time zone.
   ///
-  /// This does not request permission or display anything to the user.
-  /// The optional callback receives taps on notifications, allowing the app
-  /// shell to route the user to the relevant screen or item.
+  /// This does not request notification permission or display a notification.
   Future<void> initialize({
     DidReceiveNotificationResponseCallback? onNotificationTap,
   }) async {
     if (_isInitialized) return;
 
-    // The timezone package needs its database loaded before a local location
-    // can be selected for scheduling notifications at the correct wall time.
     timezone_data.initializeTimeZones();
 
     try {
-      final deviceTimezone = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(deviceTimezone.identifier));
+      final identifier = await _loadTimezone();
+      tz.setLocalLocation(tz.getLocation(identifier));
     } catch (error) {
-      // Do not continue with an unknown local zone: scheduled reminders could
-      // otherwise appear at an unexpected time for the user.
+      // Stop rather than schedule reminders using an incorrect time zone.
       throw StateError(
         'Trailblazer could not determine the device time zone. '
         'Notification scheduling was not initialized. Details: $error',
       );
     }
 
-    // Use the app's launcher icon for Android notifications. On Apple
-    // platforms, defer permission prompts until the user enables notifications.
     const androidSettings = AndroidInitializationSettings('launcher_icon');
+
+    // Permission prompts remain tied to a user-initiated settings action.
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -84,50 +93,42 @@ class NotificationService {
       onDidReceiveNotificationResponse: onNotificationTap,
     );
 
-    // Mark initialization complete only after the plugin has finished setup.
     _isInitialized = true;
   }
 
-  /// Requests notification permission after the user chooses to enable alerts.
-  /// Returns true when permission is granted (or not required on the platform).
+  /// Requests notification permission after the user enables alerts.
   Future<bool> requestPermissions() async {
     _ensureInitialized();
 
-    // Android 13 and later require runtime notification permission. Resolve
-    // the Android implementation only when running on that platform.
     if (defaultTargetPlatform == TargetPlatform.android) {
       final androidPlugin = _plugin
           .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin
           >();
+
       final granted = await androidPlugin?.requestNotificationsPermission();
       return granted ?? false;
     }
 
-    // Request alert and sound presentation on iOS. Badge permission is not
-    // needed by this app's current notification experience.
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       final iosPlugin = _plugin
           .resolvePlatformSpecificImplementation<
             IOSFlutterLocalNotificationsPlugin
           >();
+
       final granted = await iosPlugin?.requestPermissions(
         alert: true,
         badge: false,
         sound: true,
       );
+
       return granted ?? false;
     }
 
-    // Platforms without a permission request in this implementation can
-    // proceed without prompting.
     return true;
   }
 
-  /// Shows a notification immediately.
-  ///
-  /// Use [isMotivation] to place it in the optional motivation channel rather
-  /// than the schedule-reminder channel.
+  /// Shows an immediate notification in the selected notification channel.
   Future<void> showNotification({
     required int id,
     required String title,
@@ -146,11 +147,9 @@ class NotificationService {
     );
   }
 
-  /// Schedules one reminder for a calendar event.
+  /// Schedules one event reminder.
   ///
-  /// [eventStart] is the event's local date and time. [minutesBefore] controls
-  /// how early the reminder appears. Returns false if the reminder time has
-  /// already passed and therefore was not scheduled.
+  /// Returns false when the calculated reminder time has already passed.
   Future<bool> scheduleEventReminder({
     required int notificationId,
     required String title,
@@ -161,13 +160,10 @@ class NotificationService {
   }) async {
     _ensureInitialized();
 
-    // Calculate the alert time relative to the event and avoid creating
-    // reminders that would need to fire immediately or in the past.
     final reminderTime = eventStart.subtract(Duration(minutes: minutesBefore));
+
     if (!reminderTime.isAfter(DateTime.now())) return false;
 
-    // Include a location hint when one is available; otherwise use a generic
-    // message that does not assume the event has a venue.
     final body = location == null || location.trim().isEmpty
         ? 'Your scheduled event is coming up.'
         : 'Coming up at ${location.trim()}.';
@@ -178,8 +174,6 @@ class NotificationService {
       body: body,
       scheduledDate: tz.TZDateTime.from(reminderTime, tz.local),
       notificationDetails: _notificationDetails(),
-      // Inexact scheduling allows Android to balance timing precision with
-      // battery efficiency while permitting delivery during idle periods.
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: payload,
     );
@@ -187,12 +181,10 @@ class NotificationService {
     return true;
   }
 
-  /// Schedules reminders for a list of occurrences belonging to one event.
+  /// Rebuilds reminders for up to sixty occurrences of one event.
   ///
-  /// Pass the future occurrence start times calculated from the event's repeat
-  /// settings. Existing reminders in the supplied ID range are cancelled first
-  /// so editing an event does not leave its previous reminders behind.
-  /// The list is limited to 60 occurrences per call.
+  /// The complete reserved ID range is cancelled first to remove stale
+  /// reminders when an event's repeat pattern changes.
   Future<int> scheduleEventReminderOccurrences({
     required int firstNotificationId,
     required String title,
@@ -203,19 +195,16 @@ class NotificationService {
   }) async {
     _ensureInitialized();
 
-    // Keep the reminder window bounded and deterministic. Each occurrence
-    // receives a unique ID based on its position in the supplied list.
     final occurrenceCount = eventStartTimes.length > 60
         ? 60
         : eventStartTimes.length;
 
-    // Clear the complete reserved ID range before rebuilding it. This also
-    // removes stale reminders when an event's recurrence pattern is shortened.
     for (var index = 0; index < 60; index++) {
       await _plugin.cancel(id: firstNotificationId + index);
     }
 
     var scheduledCount = 0;
+
     for (var index = 0; index < occurrenceCount; index++) {
       final scheduled = await scheduleEventReminder(
         notificationId: firstNotificationId + index,
@@ -225,50 +214,41 @@ class NotificationService {
         location: location,
         payload: payloadPrefix == null ? null : '$payloadPrefix:$index',
       );
+
       if (scheduled) scheduledCount++;
     }
 
-    // Report only reminders that were actually placed in the future and
-    // successfully scheduled by scheduleEventReminder.
     return scheduledCount;
   }
 
-  /// Cancels one notification by its ID.
+  /// Cancels one notification.
   Future<void> cancelNotification(int notificationId) async {
     _ensureInitialized();
     await _plugin.cancel(id: notificationId);
   }
 
-  /// Cancels up to 60 occurrence reminders created for one event.
+  /// Cancels the sixty reserved reminder IDs belonging to one event.
   Future<void> cancelEventReminderOccurrences(int firstNotificationId) async {
     _ensureInitialized();
 
-    // Occurrence IDs occupy the same fixed range used by the scheduling method.
     for (var index = 0; index < 60; index++) {
       await _plugin.cancel(id: firstNotificationId + index);
     }
   }
 
-  /// Cancels all scheduled and currently displayed Trailblazer notifications.
+  /// Cancels all scheduled and currently displayed app notifications.
   Future<void> cancelAllNotifications() async {
     _ensureInitialized();
     await _plugin.cancelAll();
   }
 
-  /// Returns the notifications that are currently scheduled and pending.
-  ///
-  /// This is useful when settings screens need to inspect which reminders
-  /// remain queued on the device.
+  /// Returns notifications currently pending on the device.
   Future<List<PendingNotificationRequest>> getPendingNotifications() async {
     _ensureInitialized();
     return _plugin.pendingNotificationRequests();
   }
 
-  /// Builds the platform presentation configuration for the selected channel.
-  ///
-  /// Schedule reminders use higher Android importance than optional
-  /// motivational notifications, while both can present alerts and sound on
-  /// iOS. The channel IDs remain stable so Android retains user channel choices.
+  /// Keeps channel IDs stable so Android retains users' channel preferences.
   NotificationDetails _notificationDetails({bool isMotivation = false}) {
     if (isMotivation) {
       return const NotificationDetails(
@@ -297,10 +277,7 @@ class NotificationService {
     );
   }
 
-  /// Guards public operations that depend on the notification plugin.
-  ///
-  /// Failing fast with a clear error makes startup-order problems easier to
-  /// diagnose than allowing an uninitialized plugin call to fail indirectly.
+  /// Provides a clear error when a caller skips startup initialization.
   void _ensureInitialized() {
     if (!_isInitialized) {
       throw StateError(
